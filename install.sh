@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 022
 
 REPO_URL="https://github.com/telegramdesktop/tproxy-server.git"
-SELF_RAW_URL="https://raw.githubusercontent.com/IohnMorris/tg_web_proxy_deploy/main/install.sh"
+SELF_RAW_URL="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh"
 INSTALL_DIR="/opt/tproxy-server"
 SITE_DIR="/srv/tproxy-site"
 SITE_INDEX="/srv/tproxy-site/index.html"
