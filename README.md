@@ -36,7 +36,7 @@
 Подключитесь к вашему серверу по SSH и выполните:
 
 ```bash
-sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tg_web_proxy_deploy/main/install.sh)"
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
 ```
 
 Во время установки скрипт спросит язык, домен, email для сертификата и желаемый режим транспорта. Если пропустить выбор транспорта, будет использован `https` для максимальной совместимости. После этого скрипт настроит сервисы и выведет готовую ссылку вида `https://t.me/webproxy?...`.
@@ -226,7 +226,7 @@ Automatically deploy and manage the official [Telegram WEB Proxy (tproxy-server)
 Connect to the server over SSH and run:
 
 ```bash
-sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tg_web_proxy_deploy/main/install.sh)"
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
 ```
 
 The installer asks for a language, domain, certificate email and transport. If you skip the transport selection, it uses `https` for maximum compatibility. It then installs the required packages, deploys the official tproxy-server, configures MTProxy, nftables and Caddy, and prints a Telegram link such as `https://t.me/webproxy?...`.
