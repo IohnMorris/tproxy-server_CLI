@@ -27,6 +27,7 @@ TRAFFIC_FILE = Path('/etc/tproxy-server/traffic_stats.json')
 VERSION_FILE = Path('/etc/tproxy-server/panel-version')
 LANG_FILE = Path('/etc/tproxy-server/panel-language')
 TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
+PANEL_REPO = 'IohnMorris/tproxy-server_CLI'
 CLI_BIN = '/usr/local/bin/tg-proxy'
 CORE_DIR = '/opt/tproxy-server'
 MODES = ('https', 'https-lanes', 'websocket', 'websocket-lanes')
@@ -50,6 +51,45 @@ def latest_tag():
     versions = [(version_tuple(item.get('name', '')), item.get('name', '')) for item in tags if isinstance(item, dict)]
     versions = [item for item in versions if item[0] is not None]
     return max(versions, default=(None, None))[1]
+
+
+def panel_update():
+    """Identify unversioned installs before offering a tagged release."""
+    tag = latest_tag()
+    if not tag:
+        return None
+    try:
+        current = VERSION_FILE.read_text(encoding='utf-8').strip()
+    except OSError:
+        current = ''
+    if version_tuple(current):
+        return (tag, current) if version_tuple(tag) > version_tuple(current) else None
+
+    def matches(ref):
+        for filename, path in (('install.sh', Path(CLI_BIN)), ('tproxy_ui.py', Path(__file__).resolve())):
+            url = f'https://raw.githubusercontent.com/{PANEL_REPO}/{quote(ref, safe="")}/{filename}'
+            request = urllib.request.Request(url, headers={'User-Agent': 'tg-proxy-panel'})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                if path.read_bytes() != response.read():
+                    return False
+        return True
+
+    if matches(tag):
+        try:
+            VERSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+            VERSION_FILE.write_text(tag + '\n', encoding='utf-8')
+        except OSError:
+            pass
+        return None
+    if matches('main'):
+        request = urllib.request.Request(
+            f'https://api.github.com/repos/{PANEL_REPO}/compare/{quote(tag, safe="")}...main',
+            headers={'User-Agent': 'tg-proxy-panel', 'Accept': 'application/vnd.github+json'})
+        with urllib.request.urlopen(request, timeout=8) as response:
+            comparison = json.load(response)
+        if comparison.get('status') in ('identical', 'ahead'):
+            return None
+    return (tag, current)
 
 
 def core_update():
@@ -398,13 +438,8 @@ class TProxyDashboard(App):
 
     @work
     async def check_updates(self):
-        tag_result, core_result = await asyncio.gather(asyncio.to_thread(latest_tag), asyncio.to_thread(core_update), return_exceptions=True)
-        try:
-            current = VERSION_FILE.read_text(encoding='utf-8').strip()
-        except OSError:
-            current = ''
-        current_version = version_tuple(current)
-        tag = tag_result if isinstance(tag_result, str) and version_tuple(tag_result) and (current_version is None or version_tuple(tag_result) > current_version) else None
+        panel_result, core_result = await asyncio.gather(asyncio.to_thread(panel_update), asyncio.to_thread(core_update), return_exceptions=True)
+        tag, current = panel_result if isinstance(panel_result, tuple) else (None, '')
         core = core_result if isinstance(core_result, tuple) else None
         if not tag and not core:
             return

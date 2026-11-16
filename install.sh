@@ -1805,7 +1805,7 @@ HTML
 
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y --no-install-recommends ca-certificates curl git nftables openssl jq python3 iproute2 nano htop
+  apt-get install -y --no-install-recommends ca-certificates curl git nftables openssl jq python3 python3-venv iproute2 nano htop
 
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     git -C "$INSTALL_DIR" fetch --depth=1 origin
@@ -1838,6 +1838,23 @@ HTML
 
   sync_and_restart_services
   install_cli_command
+
+  # Prepare the dashboard during the initial installation so the first
+  # `sudo proxy` launch does not perform another package/download step.
+  cyan "$(tr_text "Установка интерфейса панели..." "Installing the control panel UI...")"
+  if ! python3 -m venv "$VENV_PATH" || ! "$VENV_PATH/bin/pip" install 'textual>=0.70,<2'; then
+    red "$(tr_text "Не удалось установить зависимости интерфейса." "Could not install UI dependencies.")"
+    exit 1
+  fi
+  tmp_ui_install="$(mktemp)"
+  if ! curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$tmp_ui_install" ||
+     ! "$VENV_PATH/bin/python3" -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8-sig").read())' "$tmp_ui_install"; then
+    rm -f "$tmp_ui_install"
+    red "$(tr_text "Не удалось скачать интерфейс панели." "Could not download the panel UI.")"
+    exit 1
+  fi
+  install -m 755 "$tmp_ui_install" "$UI_PATH"
+  rm -f "$tmp_ui_install"
 
   printf '\n'
   hr
