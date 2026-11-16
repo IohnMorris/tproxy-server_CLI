@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Collapsible, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Select, Static, TextArea
 
@@ -310,6 +310,9 @@ class TProxyDashboard(App):
     #actions #update { background: #7846b8; color: white; }
     #actions #update:hover { background: #925bd0; }
     #actions #update:focus { background: #925bd0; }
+    #actions Collapsible { margin-bottom: 1; border: round $panel; padding: 0 1; }
+    #actions CollapsibleTitle { color: $text; text-style: bold; }
+    #actions Collapsible > Button { margin-bottom: 1; }
     .narrow #content { layout: vertical; }
     .narrow #profiles { width: 100%; height: 40%; }
     .narrow #actions { width: 100%; height: 60%; }
@@ -337,33 +340,33 @@ class TProxyDashboard(App):
                 yield Label(tr('ПРОФИЛИ — выберите строку', 'PROFILES — select a row'), classes='title')
                 yield DataTable(id='users_table')
             with VerticalScroll(id='actions'):
-                yield Label(tr('УПРАВЛЕНИЕ ВЫБРАННЫМ КЛЮЧОМ', 'SELECTED KEY'), classes='section-title')
-                yield Button(tr('Открыть профиль и ссылку', 'Open profile and link'), id='link', variant='primary')
-                yield Button(tr('Изменить транспорт', 'Change transport'), id='mode', variant='default')
-                yield Button(tr('Удалить ключ', 'Delete key'), id='delete', variant='error')
-                yield Button(tr('Перевыпустить секрет ключа', 'Rotate key secret'), id='rotate-user', variant='error')
-                yield Button(tr('Сбросить трафик ключа', 'Reset key traffic'), id='reset-traffic', variant='warning')
-                yield Label(tr('КЛЮЧИ И ССЫЛКИ', 'KEYS AND LINKS'), classes='section-title')
-                yield Button(tr('Добавить ключ', 'Add key'), id='add', variant='success')
-                yield Button(tr('Показать все ссылки', 'Show all links'), id='links', variant='primary')
-                yield Button(tr('Транспорт для всех ключей', 'Transport for all keys'), id='mode-all')
-                yield Label(tr('ДОМЕН И САЙТ', 'DOMAIN AND WEBSITE'), classes='section-title')
-                yield Button(tr('Сменить домен', 'Change domain'), id='domain', variant='default')
-                yield Button(tr('Редактировать сайт', 'Edit website'), id='site', variant='default')
-                yield Button(tr('Восстановить стандартный сайт', 'Restore default website'), id='restore-site', variant='warning')
-                yield Label(tr('СЕКРЕТЫ И ПУТЬ', 'SECRETS AND PATH'), classes='section-title')
-                yield Button(tr('Перевыпустить все секреты', 'Rotate all key secrets'), id='rotate-secrets', variant='error')
-                yield Button(tr('Случайный путь', 'Generate random path'), id='rotate-path', variant='warning')
-                yield Button(tr('Задать путь', 'Set custom path'), id='set-path', variant='warning')
-                yield Label(tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), classes='section-title')
-                yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
-                yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
-                yield Button(tr('Лимиты и маршруты', 'Limits and routes'), id='limits')
-                yield Button(tr('Монитор процессов', 'Process monitor'), id='monitor')
-                yield Button(tr('Полная ротация: путь и секреты', 'Full rotation: path and secrets'), id='rotate', variant='error')
-                yield Label(tr('ОБНОВЛЕНИЯ', 'UPDATES'), classes='section-title')
-                yield Button(tr('Обновить ядро', 'Update core'), id='update')
-                yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
+                with Collapsible(tr('УПРАВЛЕНИЕ ВЫБРАННЫМ КЛЮЧОМ', 'SELECTED KEY'), collapsed=False):
+                    yield Button(tr('Открыть профиль и ссылку', 'Open profile and link'), id='link', variant='primary')
+                    yield Button(tr('Изменить транспорт', 'Change transport'), id='mode', variant='default')
+                    yield Button(tr('Удалить ключ', 'Delete key'), id='delete', variant='error')
+                    yield Button(tr('Перевыпустить секрет ключа', 'Rotate key secret'), id='rotate-user', variant='error')
+                    yield Button(tr('Сбросить трафик ключа', 'Reset key traffic'), id='reset-traffic', variant='warning')
+                with Collapsible(tr('КЛЮЧИ И ССЫЛКИ', 'KEYS AND LINKS'), collapsed=True):
+                    yield Button(tr('Добавить ключ', 'Add key'), id='add', variant='success')
+                    yield Button(tr('Показать все ссылки', 'Show all links'), id='links', variant='primary')
+                    yield Button(tr('Транспорт для всех ключей', 'Transport for all keys'), id='mode-all')
+                with Collapsible(tr('ДОМЕН И САЙТ', 'DOMAIN AND WEBSITE'), collapsed=True):
+                    yield Button(tr('Сменить домен', 'Change domain'), id='domain', variant='default')
+                    yield Button(tr('Редактировать сайт', 'Edit website'), id='site', variant='default')
+                    yield Button(tr('Восстановить стандартный сайт', 'Restore default website'), id='restore-site', variant='warning')
+                with Collapsible(tr('СЕКРЕТЫ И ПУТЬ', 'SECRETS AND PATH'), collapsed=True):
+                    yield Button(tr('Перевыпустить все секреты', 'Rotate all key secrets'), id='rotate-secrets', variant='error')
+                    yield Button(tr('Случайный путь', 'Generate random path'), id='rotate-path', variant='warning')
+                    yield Button(tr('Задать путь', 'Set custom path'), id='set-path', variant='warning')
+                with Collapsible(tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), collapsed=True):
+                    yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
+                    yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
+                    yield Button(tr('Лимиты и маршруты', 'Limits and routes'), id='limits')
+                    yield Button(tr('Монитор процессов', 'Process monitor'), id='monitor')
+                    yield Button(tr('Полная ротация: путь и секреты', 'Full rotation: path and secrets'), id='rotate', variant='error')
+                with Collapsible(tr('ОБНОВЛЕНИЯ', 'UPDATES'), collapsed=True):
+                    yield Button(tr('Обновить ядро', 'Update core'), id='update')
+                    yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
         yield Footer()
 
     def on_resize(self, event) -> None:
