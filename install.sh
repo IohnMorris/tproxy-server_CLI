@@ -370,18 +370,6 @@ self_update_script() {
   ln -sf "$CLI_PATH" "$ALIAS_PATH" 2>/dev/null || true
   green "$(tr_text "Панель обновлена. Перезапустите sudo proxy для загрузки новой версии." "Panel updated. Restart sudo proxy to load the new version.")"
 
-<<<<<<< HEAD
-=======
-  if [[ -d "$VENV_PATH" ]]; then
-    yellow "$(tr_text "Обновление графического интерфейса..." "Updating Python UI...")"
-    curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$UI_PATH" 2>/dev/null
-    chmod +x "$UI_PATH"
-  fi
-
-  green "$(tr_text "Скрипт панели успешно обновлен в $CLI_PATH (и $ALIAS_PATH)!" "Panel updated successfully at $CLI_PATH (and $ALIAS_PATH)!")"
-  sleep 1
-  exec "$CLI_PATH"
->>>>>>> 4216e8b08e68433b720fca20f94a2a20c92df413
 }
 
 # ==============================================================================
@@ -1896,7 +1884,6 @@ launch_ui() {
     exit 0
   fi
 
-<<<<<<< HEAD
   if [[ ! -x "$VENV_PATH/bin/python3" ]] || ! "$VENV_PATH/bin/python3" -c 'import textual' >/dev/null 2>&1; then
     cyan "$(tr_text "Установка компонентов интерфейса..." "Installing interface dependencies...")"
     if ! (apt-get update && apt-get install -y python3-venv &&
@@ -1922,29 +1909,6 @@ launch_ui() {
     run_panel
   fi
 
-=======
-  # Если виртуального окружения нет - создаем его и качаем библиотеку (защита от ошибок в новых Linux)
-  if [[ ! -f "$UI_PATH" ]] || [[ ! -d "$VENV_PATH" ]]; then
-    clear
-    cyan "Первый запуск нового интерфейса. Установка компонентов (Textual), подождите 10-20 секунд..."
-    apt-get update >/dev/null 2>&1
-    apt-get install -y python3-pip python3-venv >/dev/null 2>&1
-    
-    python3 -m venv "$VENV_PATH"
-    "$VENV_PATH/bin/pip" install textual >/dev/null 2>&1
-    
-    curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$UI_PATH" 2>/dev/null
-    chmod +x "$UI_PATH"
-  fi
-
-  # Запускаем новый интерфейс через виртуальное окружение
-  if [[ -f "$UI_PATH" ]]; then
-    exec "$VENV_PATH/bin/python3" "$UI_PATH"
-  else
-    red "Не удалось скачать tproxy_ui.py. Запуск резервной старой панели..."
-    run_panel
-  fi
->>>>>>> 4216e8b08e68433b720fca20f94a2a20c92df413
 }
 
 case "${1:-}" in
