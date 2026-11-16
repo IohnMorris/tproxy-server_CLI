@@ -19,6 +19,7 @@ BASE_BACKEND_PORT=2398
 UI_RAW_URL="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/tproxy_ui.py"
 UI_PATH="/usr/local/bin/tproxy_ui.py"
 VENV_PATH="/opt/tproxy-server/venv"
+LANG_FILE="/etc/tproxy-server/panel-language"
 # A single nft snapshot is reused while a screen is rendered.  Calling nft for
 # every profile made large installations noticeably slower without improving
 # the displayed counters.
@@ -41,16 +42,23 @@ end_metrics_snapshot() {
   unset NFT_SNAPSHOT_CACHE
 }
 
-# Interactive sessions choose a language; scripted calls keep the Russian default.
-# PROXY_LANG=ru or PROXY_LANG=en selects a language without prompting.
+# An explicit environment override takes precedence over the saved preference.
 PROXY_LANG="${PROXY_LANG:-}"
 if [[ "$PROXY_LANG" != "ru" && "$PROXY_LANG" != "en" ]]; then
-  PROXY_LANG=ru
-  if [[ -t 0 && -t 1 ]]; then
+  PROXY_LANG=""
+  if [[ -r "$LANG_FILE" ]]; then
+    IFS= read -r PROXY_LANG < "$LANG_FILE" || true
+  fi
+  if [[ "$PROXY_LANG" != "ru" && "$PROXY_LANG" != "en" ]] && [[ -t 0 && -t 1 ]]; then
     printf 'Language / Язык: 1) Русский  2) English [1]: '
     read -r language_choice || language_choice=""
-    case "${language_choice,,}" in 2|en|english) PROXY_LANG=en ;; esac
+    case "${language_choice,,}" in 2|en|english) PROXY_LANG=en ;; *) PROXY_LANG=ru ;; esac
+    if (( EUID == 0 )); then
+      mkdir -p "$(dirname "$LANG_FILE")"
+      printf '%s\n' "$PROXY_LANG" > "$LANG_FILE"
+    fi
   fi
+  [[ "$PROXY_LANG" == ru || "$PROXY_LANG" == en ]] || PROXY_LANG=ru
 fi
 export PROXY_LANG
 tr_text() { if [[ "$PROXY_LANG" == en ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }

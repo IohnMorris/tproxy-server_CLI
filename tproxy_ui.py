@@ -25,6 +25,7 @@ SITE_FILE = Path('/srv/tproxy-site/index.html')
 MTPROXY_ENV = Path('/etc/mtproxy/mtproxy.env')
 TRAFFIC_FILE = Path('/etc/tproxy-server/traffic_stats.json')
 VERSION_FILE = Path('/etc/tproxy-server/panel-version')
+LANG_FILE = Path('/etc/tproxy-server/panel-language')
 TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
 CLI_BIN = '/usr/local/bin/tg-proxy'
 CORE_DIR = '/opt/tproxy-server'
@@ -369,6 +370,7 @@ class TProxyDashboard(App):
                     yield Button(tr('Случайный путь', 'Generate random path'), id='rotate-path', variant='warning')
                     yield Button(tr('Задать путь', 'Set custom path'), id='set-path', variant='warning')
                 with Collapsible(title=tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), collapsed=True):
+                    yield Button(tr('Сменить язык', 'Change language'), id='language')
                     yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
                     yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
                     yield Button(tr('Лимиты и маршруты', 'Limits and routes'), id='limits')
@@ -557,6 +559,17 @@ class TProxyDashboard(App):
             if values is not None:
                 if key == 'restart': self.run_command(tr('Перезапуск служб', 'Restarting services'), ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
                 else: self.run_command(event.button.label.plain, [CLI_BIN, {'rotate': '--rotate', 'update': '--update', 'self-update': '--self-update'}[key]], 'yes\n' if key == 'rotate' else '')
+        elif key == 'language':
+            values = await self.push_screen_wait(Dialog(tr('Язык панели', 'Panel language'), [('language', tr('Выберите язык', 'Select language'), LANG, ('ru', 'en'))], tr('Интерфейс перезапустится на выбранном языке.', 'The interface will restart in the selected language.')))
+            if values is not None:
+                language = values['language']
+                try:
+                    LANG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    LANG_FILE.write_text(language + '\n', encoding='utf-8')
+                    os.environ['PROXY_LANG'] = language
+                    os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
+                except OSError as exc:
+                    self.notify(tr(f'Не удалось сохранить язык или перезапустить панель: {exc}', f'Could not save the language or restart the panel: {exc}'), severity='error')
         elif key == 'diagnostics':
             self.run_command(tr('Состояние и логи', 'Status and logs'), [CLI_BIN, 'ui-diagnostics'])
         elif key == 'monitor':

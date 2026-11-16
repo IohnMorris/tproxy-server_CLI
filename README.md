@@ -31,6 +31,9 @@ sudo proxy
 
 Копирование ссылки использует возможности SSH-терминала: поддержка буфера обмена зависит от клиента и его настроек. Если копирование недоступно, выделите ссылку мышью и скопируйте средствами терминала.
 
+> [!IMPORTANT]
+> **Обязательно замените стандартную страницу-заглушку на собственный полноценный сайт.** Стандартная страница может сделать сервер более заметным для систем фильтрации и повысить риск блокировки прокси. Откройте панель `sudo proxy` → **«Домен и сайт» → «Редактировать сайт»**, очистите шаблон, вставьте свой HTML и сохраните его. Проверьте, что сайт открывается по вашему домену. Замена страницы не гарантирует защиту от блокировок.
+
 ![Панель TG-Proxy на русском языке](assets/panel-ru.png)
 
 ### Возможности
@@ -82,7 +85,7 @@ sudo proxy --self-update v1.0.0    # Установить панель из те
 sudo proxy --help                  # Справка
 ```
 
-При интерактивном запуске выберите язык; для неинтерактивных команд можно указать `PROXY_LANG=ru` или `PROXY_LANG=en`. Сайт хранится в `/srv/tproxy-site/index.html`. После изменения HTML через панель службы перезапускаются. Смена секрета или пути делает соответствующие старые ссылки недействительными.
+При первом интерактивном запуске выберите язык: панель запомнит его для следующих запусков. Сменить язык можно в разделе **«Сервис и обслуживание» → «Сменить язык»**; интерфейс перезапустится. Для отдельной команды можно временно задать `PROXY_LANG=ru` или `PROXY_LANG=en`. Сайт хранится в `/srv/tproxy-site/index.html`. После изменения HTML через панель службы перезапускаются. Смена секрета или пути делает соответствующие старые ссылки недействительными.
 
 ### Обновления
 
@@ -103,7 +106,10 @@ sudo proxy
 
 The installer asks for a language, domain, certificate email and transport. The dashboard shows server metrics at the top, profiles on the left and actions on the right. The selected-key section starts open; other sections expand on demand. Press `F5` to refresh, `Q` to quit, or `Ctrl+P` to choose a theme. Clipboard support depends on your SSH terminal.
 
-The command examples above also apply in English. Set `PROXY_LANG=en` for non-interactive commands. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
+The command examples above also apply in English. The language selected on the first interactive launch is remembered. To change it, open **Service and maintenance → Change language**; the interface restarts in the selected language. Set `PROXY_LANG=en` or `PROXY_LANG=ru` to override the saved language for an individual command. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
+
+> [!IMPORTANT]
+> **Replace the default placeholder page with your own complete website.** The default page can make the server more conspicuous to filtering systems and may increase the risk of the proxy being blocked. Open `sudo proxy` → **Domain and website → Edit website**, clear the template, paste your HTML, and save it. Check that the site opens at your domain. Replacing the page does not guarantee protection from blocking.
 
 ![TG-Proxy dashboard in English](assets/panel-en.png)
 
