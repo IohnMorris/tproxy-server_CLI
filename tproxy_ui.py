@@ -103,6 +103,44 @@ class TextDialog(ModalScreen):
             self.dismiss(None)
 
 
+class ProfileDialog(ModalScreen):
+    CSS = '''
+    ProfileDialog { align: center middle; background: $background 70%; }
+    #profile-card { width: 80; max-width: 95%; height: auto; max-height: 90%; border: round $accent; background: $surface; padding: 1 2; }
+    #profile-content { height: auto; max-height: 1fr; }
+    #profile-buttons { height: auto; margin-top: 1; }
+    #profile-buttons Button { margin-right: 1; }
+    '''
+
+    def __init__(self, profile, link, error=''):
+        super().__init__()
+        self.profile, self.link, self.error = profile, link, error
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id='profile-card'):
+            yield Label('Профиль: ' + str(self.profile.get('name', '')), classes='dialog-title')
+            with VerticalScroll(id='profile-content'):
+                yield Static('Транспорт: ' + str(self.profile.get('carrier_mode', 'https')), markup=False)
+                yield Static('Backend: ' + str(self.profile.get('backend', '')), markup=False)
+                yield Label('Ссылка для подключения')
+                if self.link:
+                    yield Input(value=self.link, id='profile-link')
+                else:
+                    yield Static('Не удалось сформировать ссылку: ' + self.error, markup=False)
+            with Horizontal(id='profile-buttons'):
+                yield Button('Закрыть', id='profile-close')
+                if self.link:
+                    yield Button('Копировать ссылку', id='profile-copy', variant='primary')
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        event.stop()
+        if event.button.id == 'profile-copy':
+            self.app.copy_to_clipboard(self.link)
+            self.app.notify('Ссылка отправлена в буфер обмена терминала')
+        elif event.button.id == 'profile-close':
+            self.dismiss()
+
+
 class TProxyDashboard(App):
     TITLE = 'TG-Proxy • Центр управления'
     CSS = '''
@@ -179,6 +217,21 @@ class TProxyDashboard(App):
             self.notify('Выберите профиль в таблице', severity='warning')
             return None
         return self.profiles[row]
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.data_table.id != 'users_table':
+            return
+        row = event.cursor_row
+        if row < 0 or row >= len(self.profiles):
+            return
+        profile = self.profiles[row]
+        try:
+            config = json.loads(CONFIG_FILE.read_text(encoding='utf-8'))
+            link = make_link(profile, config)
+            error = ''
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            link, error = '', str(exc)
+        self.push_screen(ProfileDialog(profile, link, error))
 
     @work
     async def on_button_pressed(self, event: Button.Pressed) -> None:
