@@ -383,10 +383,13 @@ class TProxyDashboard(App):
         yield Footer()
 
     def on_resize(self, event) -> None:
-        self.screen.set_class(event.size.width < 90, 'narrow')
+        if hasattr(self, 'dashboard_screen'):
+            self.dashboard_screen.set_class(event.size.width < 90, 'narrow')
 
     def on_mount(self) -> None:
-        table = self.query_one(DataTable)
+        self.dashboard_screen = self.screen
+        self.dashboard_screen.set_class(self.size.width < 90, 'narrow')
+        table = self.dashboard_screen.query_one('#users_table', DataTable)
         table.add_columns('№', tr('Имя', 'Name'), tr('Транспорт', 'Transport'), 'Backend')
         table.cursor_type, table.zebra_stripes = 'row', True
         self.action_refresh_data()
@@ -421,7 +424,7 @@ class TProxyDashboard(App):
                 self.run_command(tr('Обновление', 'Updating'), commands[0], additional_commands=commands[1:])
 
     def action_refresh_data(self) -> None:
-        table = self.query_one(DataTable)
+        table = self.dashboard_screen.query_one('#users_table', DataTable)
         cursor = table.cursor_row
         try:
             profiles = json.loads(PROFILES_FILE.read_text(encoding='utf-8'))['profiles']
@@ -433,27 +436,27 @@ class TProxyDashboard(App):
                 table.add_row(str(index), str(profile.get('name', '')), str(profile.get('carrier_mode', 'https')), str(profile.get('backend', '')))
             if profiles:
                 table.move_cursor(row=min(cursor, len(profiles) - 1))
-            self.query_one('#status', Static).update(tr(f'Профилей: {len(profiles)} • F5 — обновить', f'Profiles: {len(profiles)} • F5 — refresh') + (tr(' • Выполняется операция...', ' • Operation in progress...') if self.busy else ''))
+            self.dashboard_screen.query_one('#status', Static).update(tr(f'Профилей: {len(profiles)} • F5 — обновить', f'Profiles: {len(profiles)} • F5 — refresh') + (tr(' • Выполняется операция...', ' • Operation in progress...') if self.busy else ''))
             if not self.metrics_busy:
                 self.refresh_metrics([dict(profile) for profile in profiles])
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.profiles = []
             table.clear()
-            self.query_one('#status', Static).update(tr(f'Не удалось прочитать профили: {exc}', f'Could not read profiles: {exc}'))
+            self.dashboard_screen.query_one('#status', Static).update(tr(f'Не удалось прочитать профили: {exc}', f'Could not read profiles: {exc}'))
 
     @work(group='metrics')
     async def refresh_metrics(self, profiles):
         self.metrics_busy = True
         try:
             metrics = await asyncio.to_thread(collect_server_metrics, profiles)
-            self.query_one('#server-metrics', Static).update(metrics)
+            self.dashboard_screen.query_one('#server-metrics', Static).update(metrics)
         except Exception:
-            self.query_one('#server-metrics', Static).update(tr('Сведения о сервере недоступны', 'Server information unavailable'))
+            self.dashboard_screen.query_one('#server-metrics', Static).update(tr('Сведения о сервере недоступны', 'Server information unavailable'))
         finally:
             self.metrics_busy = False
 
     def selected(self):
-        row = self.query_one(DataTable).cursor_row
+        row = self.dashboard_screen.query_one('#users_table', DataTable).cursor_row
         if not self.profiles or row >= len(self.profiles):
             self.notify(tr('Выберите профиль в таблице', 'Select a profile in the table'), severity='warning')
             return None
