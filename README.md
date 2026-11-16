@@ -63,16 +63,9 @@ sudo proxy --help                  # Справка
 
 При интерактивном запуске выберите язык; для неинтерактивных команд можно указать `PROXY_LANG=ru` или `PROXY_LANG=en`. Сайт хранится в `/srv/tproxy-site/index.html`. После изменения HTML через панель службы перезапускаются. Смена секрета или пути делает соответствующие старые ссылки недействительными.
 
-### Выпуск версии
+### Обновления
 
-Панель проверяет числовые теги формата `v1.2.3`. После коммита и отправки кода создайте и отправьте тег:
-
-```bash
-git tag -a v1.2.3 -m "TG-Proxy v1.2.3"
-git push origin v1.2.3
-```
-
-Чтобы версия отображалась в разделе Releases на GitHub, создайте релиз на основе этого тега. Тег должен содержать оба файла: `install.sh` и `tproxy_ui.py`.
+При запуске панель проверяет наличие обновлений и предлагает установить доступную версию. Обновление панели также можно запустить вручную командой `sudo proxy --self-update`.
 
 ## English
 
@@ -103,9 +96,9 @@ The installer asks for a language, domain, certificate email and transport. The 
 
 The command examples above also apply in English. Set `PROXY_LANG=en` for non-interactive commands. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
 
-### Releases
+### Updates
 
-The panel checks numeric tags such as `v1.2.3`. Commit and push both `install.sh` and `tproxy_ui.py`, then create and push a tag as shown above. Create a GitHub Release from the tag to display it in the repository's Releases section.
+At startup, the panel checks for updates and offers to install an available version. You can also update the panel manually with `sudo proxy --self-update`.
 
 ## License / Лицензия
 
