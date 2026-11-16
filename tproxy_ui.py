@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
@@ -22,9 +23,25 @@ PROFILES_FILE = Path('/etc/tproxy-server/profiles.json')
 CONFIG_FILE = Path('/etc/tproxy-server/config.json')
 SITE_FILE = Path('/srv/tproxy-site/index.html')
 TRAFFIC_FILE = Path('/etc/tproxy-server/traffic_stats.json')
+VERSION_FILE = Path('/etc/tproxy-server/panel-version')
+TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
 CLI_BIN = '/usr/local/bin/tg-proxy'
 MODES = ('https', 'https-lanes', 'websocket', 'websocket-lanes')
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+
+
+def version_tuple(tag):
+    match = re.fullmatch(r'v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', tag)
+    return tuple(map(int, match.groups())) if match else None
+
+
+def latest_tag():
+    request = urllib.request.Request(TAGS_URL, headers={'User-Agent': 'tg-proxy-panel', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(request, timeout=8) as response:
+        tags = json.load(response)
+    versions = [(version_tuple(item.get('name', '')), item.get('name', '')) for item in tags if isinstance(item, dict)]
+    versions = [item for item in versions if item[0] is not None]
+    return max(versions, default=(None, None))[1]
 
 
 def format_size(value):
@@ -138,9 +155,10 @@ class Dialog(ModalScreen):
     #dialog-buttons Button { width: 1fr; margin-right: 1; }
     Input, Select { margin-bottom: 1; }
     '''
-    def __init__(self, title, fields=(), message='', confirm='Применить'):
+    def __init__(self, title, fields=(), message='', confirm='Применить', cancel='Отмена'):
         super().__init__()
         self.title_text, self.fields, self.message, self.confirm = title, fields, message, confirm
+        self.cancel = cancel
 
     def compose(self) -> ComposeResult:
         with Vertical(id='dialog'):
@@ -155,7 +173,7 @@ class Dialog(ModalScreen):
                     else:
                         yield Input(value=value, id=key)
             with Horizontal(id='dialog-buttons'):
-                yield Button('Отмена', id='cancel')
+                yield Button(self.cancel, id='cancel')
                 yield Button(self.confirm, id='confirm', variant='primary')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -297,6 +315,31 @@ class TProxyDashboard(App):
         table.cursor_type, table.zebra_stripes = 'row', True
         self.action_refresh_data()
         self.set_interval(10, self.action_refresh_data)
+        self.check_updates()
+
+    @work
+    async def check_updates(self):
+        try:
+            tag = await asyncio.to_thread(latest_tag)
+            try:
+                current = VERSION_FILE.read_text(encoding='utf-8').strip()
+            except FileNotFoundError:
+                current = ''
+            current_version = version_tuple(current)
+            if not tag or (current_version is not None and version_tuple(tag) <= current_version):
+                return
+            message = f'Доступна версия {tag}. '
+            message += f'Установлена: {current}.' if current_version else 'Текущая версия не определена.'
+            message += '\nПосле обновления панель перезапустится.'
+            result = await self.push_screen_wait(Dialog('Доступно обновление', message=message, confirm='Обновить', cancel='Позже'))
+            if result is not None:
+                if self.busy:
+                    self.notify('Дождитесь завершения операции и обновите панель вручную', severity='warning')
+                else:
+                    self.run_command('Обновление панели', [CLI_BIN, '--self-update', tag])
+        except (OSError, ValueError, TypeError, AttributeError):
+            # Network failures must not prevent the panel from opening.
+            return
 
     def action_refresh_data(self) -> None:
         table = self.query_one(DataTable)
@@ -427,7 +470,7 @@ class TProxyDashboard(App):
             text += f'\n\nКод завершения: {process.returncode}'
             if title == 'Смена домена' and 'отменена' in text.lower():
                 text += '\nПроверьте DNS: при несовпадении адресов операция отменяется.'
-            if command == [CLI_BIN, '--self-update'] and process.returncode == 0:
+            if command[:2] == [CLI_BIN, '--self-update'] and process.returncode == 0:
                 self.notify('Панель обновлена. Перезапуск интерфейса…')
                 await asyncio.sleep(1)
                 os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])

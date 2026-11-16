@@ -341,15 +341,24 @@ install_cli_command() {
 
 # Самообновление скрипта панели с GitHub
 self_update_script() {
+  local update_tag="${1:-}" cli_url="$SELF_RAW_URL" ui_url="$UI_RAW_URL"
+  if [[ -n "$update_tag" ]]; then
+    if [[ ! "$update_tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      red "Некорректный тег версии: $update_tag"
+      return 1
+    fi
+    cli_url="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/${update_tag}/install.sh"
+    ui_url="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/${update_tag}/tproxy_ui.py"
+  fi
   printf '\n'
   header_box "$(tr_text "ОБНОВЛЕНИЕ ПАНЕЛИ TG-PROXY С GITHUB" "UPDATE TG-PROXY PANEL FROM GITHUB")"
-  yellow "$(tr_text "Скачивание свежей версии из: $SELF_RAW_URL" "Downloading latest version from: $SELF_RAW_URL")"
+  yellow "$(tr_text "Скачивание версии из: $cli_url" "Downloading version from: $cli_url")"
 
   local tmp_new tmp_ui
   tmp_new="$(mktemp)"
   tmp_ui="$(mktemp)"
-  if ! curl -fsSL "${SELF_RAW_URL}?t=$(date +%s)" -o "$tmp_new" ||
-     ! curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$tmp_ui" ||
+  if ! curl -fsSL "${cli_url}?t=$(date +%s)" -o "$tmp_new" ||
+     ! curl -fsSL "${ui_url}?t=$(date +%s)" -o "$tmp_ui" ||
      ! grep -q "REPO_URL=" "$tmp_new" || ! bash -n "$tmp_new" ||
      ! python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8-sig").read())' "$tmp_ui"; then
     rm -f "$tmp_new" "$tmp_ui"
@@ -368,6 +377,12 @@ self_update_script() {
   mv -f "$staged_ui" "$UI_PATH"
   mv -f "$staged_cli" "$CLI_PATH"
   ln -sf "$CLI_PATH" "$ALIAS_PATH" 2>/dev/null || true
+  if [[ -n "$update_tag" ]]; then
+    mkdir -p /etc/tproxy-server
+    printf '%s\n' "$update_tag" > /etc/tproxy-server/panel-version
+  else
+    rm -f /etc/tproxy-server/panel-version
+  fi
   green "$(tr_text "Панель обновлена. Перезапустите sudo proxy для загрузки новой версии." "Panel updated. Restart sudo proxy to load the new version.")"
 
 }
@@ -1922,7 +1937,7 @@ case "${1:-}" in
     update_proxy
     ;;
   --self-update|self-update)
-    self_update_script
+    self_update_script "${2:-}"
     ;;
   domain|set-domain)
     change_domain "${2:-}"
