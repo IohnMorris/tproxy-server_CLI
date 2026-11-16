@@ -282,7 +282,10 @@ class TProxyDashboard(App):
     #server-metrics { height: auto; padding: 0 1; color: $text-muted; }
     DataTable { height: 1fr; }
     #actions Button { width: 100%; margin-bottom: 1; }
-    .section-title { color: $text-muted; text-style: bold; padding: 1 0 0 0; }
+    .section-title { color: $text-muted; text-style: bold; padding: 1 0 0 0; margin-bottom: 1; }
+    #actions #update { background: #7846b8; color: white; }
+    #actions #update:hover { background: #925bd0; }
+    #actions #update:focus { background: #925bd0; }
     .narrow #content { layout: vertical; }
     .narrow #profiles { width: 100%; height: 40%; }
     .narrow #actions { width: 100%; height: 60%; }
@@ -317,8 +320,9 @@ class TProxyDashboard(App):
                 yield Label(tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), classes='section-title')
                 yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
                 yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
-                yield Button(tr('Полная ротация секретов', 'Rotate all secrets'), id='rotate', variant='warning')
-                yield Button(tr('Обновить ядро', 'Update core'), id='update', variant='warning')
+                yield Button(tr('Полная ротация секретов', 'Rotate all secrets'), id='rotate', variant='error')
+                yield Label(tr('ОБНОВЛЕНИЯ', 'UPDATES'), classes='section-title')
+                yield Button(tr('Обновить ядро', 'Update core'), id='update')
                 yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
         yield Footer()
 
