@@ -16,7 +16,9 @@ CLI_PATH="/usr/local/bin/tg-proxy"
 ALIAS_PATH="/usr/local/bin/proxy"
 NFT_TABLE="tg_proxy_stats"
 BASE_BACKEND_PORT=2398
-
+UI_RAW_URL="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/tproxy_ui.py"
+UI_PATH="/usr/local/bin/tproxy_ui.py"
+VENV_PATH="/opt/tproxy-server/venv"
 # A single nft snapshot is reused while a screen is rendered.  Calling nft for
 # every profile made large installations noticeably slower without improving
 # the displayed counters.
@@ -343,27 +345,31 @@ self_update_script() {
   header_box "$(tr_text "ОБНОВЛЕНИЕ ПАНЕЛИ TG-PROXY С GITHUB" "UPDATE TG-PROXY PANEL FROM GITHUB")"
   yellow "$(tr_text "Скачивание свежей версии из: $SELF_RAW_URL" "Downloading latest version from: $SELF_RAW_URL")"
 
-  local tmp_new
+  local tmp_new tmp_ui
   tmp_new="$(mktemp)"
-  if ! curl -fsSL "${SELF_RAW_URL}?t=$(date +%s)" -o "$tmp_new"; then
-    rm -f "$tmp_new"
-    red "$(tr_text "Не удалось скачать файл с GitHub. Проверь интернет или доступность репозитория." "Could not download from GitHub. Check your connection and repository availability.")"
+  tmp_ui="$(mktemp)"
+  if ! curl -fsSL "${SELF_RAW_URL}?t=$(date +%s)" -o "$tmp_new" ||
+     ! curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$tmp_ui" ||
+     ! grep -q "REPO_URL=" "$tmp_new" || ! bash -n "$tmp_new" ||
+     ! python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8-sig").read())' "$tmp_ui"; then
+    rm -f "$tmp_new" "$tmp_ui"
+    red "$(tr_text "Не удалось скачать или проверить обновление. Текущая панель сохранена." "Could not download or validate the update. The current panel was preserved.")"
     return 1
   fi
 
-  if ! grep -q "REPO_URL=" "$tmp_new"; then
-    rm -f "$tmp_new"
-    red "$(tr_text "Скачанный файл поврежден или не является скриптом tg-proxy." "The downloaded file is damaged or is not a tg-proxy script.")"
+  # Stage files on the destination filesystem before replacing installed versions.
+  local staged_cli="${CLI_PATH}.new.$$" staged_ui="${UI_PATH}.new.$$"
+  if ! install -m 755 "$tmp_new" "$staged_cli" || ! install -m 755 "$tmp_ui" "$staged_ui"; then
+    rm -f "$tmp_new" "$tmp_ui" "$staged_cli" "$staged_ui"
+    red "$(tr_text "Не удалось подготовить обновление." "Could not stage the update.")"
     return 1
   fi
-
-  mv -f "$tmp_new" "$CLI_PATH"
-  chmod +x "$CLI_PATH"
+  rm -f "$tmp_new" "$tmp_ui"
+  mv -f "$staged_ui" "$UI_PATH"
+  mv -f "$staged_cli" "$CLI_PATH"
   ln -sf "$CLI_PATH" "$ALIAS_PATH" 2>/dev/null || true
+  green "$(tr_text "Панель обновлена. Перезапустите sudo proxy для загрузки новой версии." "Panel updated. Restart sudo proxy to load the new version.")"
 
-  green "$(tr_text "Скрипт панели успешно обновлен в $CLI_PATH (и $ALIAS_PATH)!" "Panel updated successfully at $CLI_PATH (and $ALIAS_PATH)!")"
-  sleep 1
-  exec "$CLI_PATH"
 }
 
 # ==============================================================================
@@ -1871,6 +1877,40 @@ HELP
 # Гарантируем установку глобальной команды при любом вызове
 install_cli_command 2>/dev/null || true
 
+launch_ui() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    yellow "$(tr_text "Прокси еще не установлен. Запуск мастера установки..." "Proxy is not installed yet. Starting the installation wizard...")"
+    install_proxy
+    exit 0
+  fi
+
+  if [[ ! -x "$VENV_PATH/bin/python3" ]] || ! "$VENV_PATH/bin/python3" -c 'import textual' >/dev/null 2>&1; then
+    cyan "$(tr_text "Установка компонентов интерфейса..." "Installing interface dependencies...")"
+    if ! (apt-get update && apt-get install -y python3-venv &&
+          python3 -m venv "$VENV_PATH" && "$VENV_PATH/bin/pip" install 'textual>=0.70,<2'); then
+      red "$(tr_text "Не удалось установить интерфейс. Запуск резервного меню." "Could not install the interface. Starting the fallback menu.")"
+      run_panel
+      return
+    fi
+  fi
+  if [[ ! -f "$UI_PATH" ]]; then
+    local tmp_ui
+    tmp_ui="$(mktemp)"
+    if curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$tmp_ui" &&
+       "$VENV_PATH/bin/python3" -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8-sig").read())' "$tmp_ui"; then
+      install -m 755 "$tmp_ui" "$UI_PATH"
+    fi
+    rm -f "$tmp_ui"
+  fi
+  if [[ -f "$UI_PATH" ]]; then
+    exec "$VENV_PATH/bin/python3" "$UI_PATH"
+  else
+    red "$(tr_text "Не удалось скачать интерфейс. Запуск резервного меню." "Could not download the interface. Starting the fallback menu.")"
+    run_panel
+  fi
+
+}
+
 case "${1:-}" in
   --install)
     install_proxy
@@ -1913,7 +1953,7 @@ case "${1:-}" in
     ;;
   "")
     if [[ -f "$CONFIG_FILE" ]]; then
-      run_panel
+      launch_ui
     else
       install_proxy
     fi
