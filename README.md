@@ -67,6 +67,14 @@ sudo proxy
 - **Максимум соединений (Max Connections)** — лимит, передаваемый MTProxy для каждого воркера. Увеличение лимита само по себе не ускоряет прокси: фактическая ёмкость зависит от CPU, памяти и сети. Начальное значение — `4096`.
 - **Маршрутизация статики (Static Routing)** — режим обработки путей статического сайта: `exact` использует точное сопоставление, `legacy` сохраняет совместимость со старой логикой. Используйте `exact`, если обратная совместимость не требуется.
 
+### Полное удаление
+
+Если прокси больше не нужен, откройте `sudo proxy` и перейдите в **«Обновления» → «Удалить прокси с сервера»**. Это опасное необратимое действие: введите `DELETE` в окне подтверждения.
+
+Удаляются службы и таймеры прокси, бинарники, профили и ключи, статистика трафика, сайт-заглушка, виртуальное окружение панели, настройки `/etc/tproxy-server` и `/etc/mtproxy`, исходники `/opt/tproxy-server` и `/opt/MTProxy`, а также правила firewall, созданные проектом.
+
+Если установщик заменял конфигурацию Caddy, прежняя версия восстанавливается из резервной копии, когда установленный файл не изменялся. Изменённые файлы Caddy сохраняются для ручной проверки. Общие системные пакеты, Go и системные пользователи автоматически не удаляются, потому что их могут использовать другие приложения.
+
 ### Команды
 
 ```bash
@@ -143,6 +151,14 @@ These settings are under **Service and maintenance → Limits and routes**.
 - **Workers** is the number of MTProxy worker processes. More processes can help under heavy load, but consume CPU and RAM. For a 1-vCPU VPS, start with `1` and adjust after observing the load.
 - **Max Connections** is the connection limit passed to MTProxy for each worker. Increasing it does not make the proxy faster by itself; actual capacity depends on CPU, memory and network bandwidth. A starting value is `4096`.
 - **Static Routing** controls how static website paths are matched: `exact` uses exact matching, while `legacy` preserves compatibility with the older behavior. Use `exact` unless backward compatibility is needed.
+
+### Complete uninstall
+
+If you no longer need the proxy, open `sudo proxy` and choose **Updates → Uninstall proxy from server**. This is a dangerous, irreversible action; type `DELETE` in the confirmation dialog.
+
+The uninstall removes the proxy services and timers, binaries, profiles and keys, traffic statistics, the placeholder website, the panel virtual environment, `/etc/tproxy-server` and `/etc/mtproxy`, the source trees `/opt/tproxy-server` and `/opt/MTProxy`, and firewall tables created by the project.
+
+If the installer replaced a Caddy configuration, the previous version is restored from a backup when the installed file has not been modified. Modified Caddy files are retained for manual review. Shared system packages, Go and system users are not removed automatically because other applications may depend on them.
 
 ### Updates
 
