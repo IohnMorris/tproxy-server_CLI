@@ -88,6 +88,11 @@ def panel_update():
         with urllib.request.urlopen(request, timeout=8) as response:
             comparison = json.load(response)
         if comparison.get('status') in ('identical', 'ahead'):
+            try:
+                VERSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+                VERSION_FILE.write_text('main\n', encoding='utf-8')
+            except OSError:
+                pass
             return None
     return (tag, current)
 
@@ -428,6 +433,7 @@ class TProxyDashboard(App):
 
     def on_mount(self) -> None:
         self.dashboard_screen = self.screen
+        self.update_title()
         self.dashboard_screen.set_class(self.size.width < 90, 'narrow')
         table = self.dashboard_screen.query_one('#users_table', DataTable)
         table.add_columns('№', tr('Имя', 'Name'), tr('Транспорт', 'Transport'), 'Backend')
@@ -436,9 +442,19 @@ class TProxyDashboard(App):
         self.set_interval(10, self.action_refresh_data)
         self.check_updates()
 
+    def update_title(self):
+        try:
+            version = VERSION_FILE.read_text(encoding='utf-8').strip()
+        except OSError:
+            version = ''
+        if not version_tuple(version) and version != 'main':
+            version = tr('версия неизвестна', 'version unknown')
+        self.title = f'{self.TITLE} • {version}'
+
     @work
     async def check_updates(self):
         panel_result, core_result = await asyncio.gather(asyncio.to_thread(panel_update), asyncio.to_thread(core_update), return_exceptions=True)
+        self.update_title()
         tag, current = panel_result if isinstance(panel_result, tuple) else (None, '')
         core = core_result if isinstance(core_result, tuple) else None
         if not tag and not core:
