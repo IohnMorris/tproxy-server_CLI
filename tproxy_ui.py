@@ -340,7 +340,7 @@ class TProxyDashboard(App):
                 yield Label(tr('ПРОФИЛИ — выберите строку', 'PROFILES — select a row'), classes='title')
                 yield DataTable(id='users_table')
             with VerticalScroll(id='actions'):
-                with Collapsible(title=tr('УПРАВЛЕНИЕ ВЫБРАННЫМ КЛЮЧОМ', 'SELECTED KEY'), collapsed=False):
+                with Collapsible(title=tr('УПРАВЛЕНИЕ КЛЮЧОМ', 'SELECTED KEY'), collapsed=False):
                     yield Button(tr('Открыть профиль и ссылку', 'Open profile and link'), id='link', variant='primary')
                     yield Button(tr('Изменить транспорт', 'Change transport'), id='mode', variant='default')
                     yield Button(tr('Удалить ключ', 'Delete key'), id='delete', variant='error')
@@ -508,7 +508,7 @@ class TProxyDashboard(App):
                 if values is not None:
                     self.run_command(tr('Обновление ключа', 'Updating key'), [CLI_BIN, 'ui-rotate-user' if rotate else 'ui-reset-traffic', name], 'yes\n' if rotate else '')
         elif key == 'mode-all':
-            values = await self.push_screen_wait(Dialog(tr('Транспорт для всех ключей', 'Transport for all keys'), [('mode', tr('Режим', 'Mode'), 'https', MODES)]))
+            values = await self.push_screen_wait(Dialog(tr('Изменить транспорт для всех ключей', 'Change transport for all keys'), [('mode', tr('Режим', 'Mode'), 'https', MODES)]))
             if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', 'all', values['mode']])
         elif key in ('rotate-secrets', 'rotate-path', 'set-path'):
             fields = [('path', tr('Новый путь без слешей (пусто — корень)', 'New path without slashes (empty for root)'), '', None)] if key == 'set-path' else []
@@ -556,9 +556,12 @@ class TProxyDashboard(App):
             try:
                 content = SITE_FILE.read_text(encoding='utf-8')
                 edited = await self.push_screen_wait(TextDialog(tr('Сайт-заглушка: HTML', 'Placeholder website: HTML'), content, editable=True))
-                if edited is not None:
+                if edited is not None and edited != content:
                     SITE_FILE.write_text(edited, encoding='utf-8')
-                    self.notify(tr('Сайт сохранён', 'Website saved'))
+                    self.notify(tr('Сайт сохранён. Перезапуск служб…', 'Website saved. Restarting services…'))
+                    self.run_command(tr('Применение сайта', 'Applying website'), ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
+                elif edited is not None:
+                    self.notify(tr('Изменений нет', 'No changes'))
             except (OSError, UnicodeError) as exc:
                 self.notify(str(exc), severity='error')
 

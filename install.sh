@@ -1985,7 +1985,8 @@ case "${1:-}" in
 </html>
 HTML
       chmod 755 "$SITE_INDEX"
-      green "$(tr_text 'Стандартная заглушка восстановлена.' 'Default placeholder restored.')"
+      green "$(tr_text 'Стандартная заглушка восстановлена. Перезапуск служб...' 'Default placeholder restored. Restarting services...')"
+      systemctl restart tproxy-server mtproxy caddy
     fi
     ;;
   --install)
