@@ -344,7 +344,7 @@ self_update_script() {
   local update_tag="${1:-}" cli_url="$SELF_RAW_URL" ui_url="$UI_RAW_URL"
   if [[ -n "$update_tag" ]]; then
     if [[ ! "$update_tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      red "Некорректный тег версии: $update_tag"
+      red "$(tr_text "Некорректный тег версии: $update_tag" "Invalid version tag: $update_tag")"
       return 1
     fi
     cli_url="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/${update_tag}/install.sh"

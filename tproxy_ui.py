@@ -27,6 +27,11 @@ VERSION_FILE = Path('/etc/tproxy-server/panel-version')
 TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
 CLI_BIN = '/usr/local/bin/tg-proxy'
 MODES = ('https', 'https-lanes', 'websocket', 'websocket-lanes')
+LANG = 'en' if os.environ.get('PROXY_LANG') == 'en' else 'ru'
+
+def tr(ru, en):
+    return en if LANG == 'en' else ru
+
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 
@@ -45,8 +50,9 @@ def latest_tag():
 
 
 def format_size(value):
-    for unit in ('Б', 'КиБ', 'МиБ', 'ГиБ', 'ТиБ'):
-        if value < 1024 or unit == 'ТиБ':
+    units = ('B', 'KiB', 'MiB', 'GiB', 'TiB') if LANG == 'en' else ('Б', 'КиБ', 'МиБ', 'ГиБ', 'ТиБ')
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
             return f'{value:.1f} {unit}'
         value /= 1024
 
@@ -92,7 +98,8 @@ def collect_server_metrics(profiles):
     states = []
     for name, label in (('tproxy-server', 'proxy'), ('mtproxy', 'MTProxy'), ('caddy', 'Caddy')):
         state = run('systemctl', 'is-active', name)
-        states.append(f'{label}: {"работает" if state and state.strip() == "active" else "неизвестно/остановлен"}')
+        status = tr('работает', 'running') if state and state.strip() == 'active' else tr('неизвестно/остановлен', 'unknown/stopped')
+        states.append(f'{label}: {status}')
 
     connections = []
     for profile in profiles:
@@ -108,7 +115,8 @@ def collect_server_metrics(profiles):
     if connections is None:
         online = '—'
     else:
-        online = f'~{sum((count + 5) // 6 for count in connections)} чел. ({sum(connections)} соед.)'
+        users = sum((count + 5) // 6 for count in connections)
+        online = tr(f'~{users} чел. ({sum(connections)} соед.)', f'~{users} users ({sum(connections)} connections)')
 
     try:
         saved = json.loads(TRAFFIC_FILE.read_text(encoding='utf-8'))
@@ -129,15 +137,18 @@ def collect_server_metrics(profiles):
                     traffic += sum(int(expr['counter'].get('bytes', 0)) for expr in rule.get('expr', []) if 'counter' in expr)
         except (ValueError, TypeError, AttributeError):
             traffic = None
-    return (f'CPU: {cpu} • RAM: {ram} • Диск: {disk_text} • Load: {load}\n'
-            f'Онлайн: {online} • Трафик всего: {format_size(traffic) if traffic is not None else "—"} • '
+    disk_label = tr('Диск', 'Disk')
+    online_label = tr('Онлайн', 'Online')
+    traffic_label = tr('Трафик всего', 'Total traffic')
+    return (f'CPU: {cpu} • RAM: {ram} • {disk_label}: {disk_text} • Load: {load}\n'
+            f'{online_label}: {online} • {traffic_label}: {format_size(traffic) if traffic is not None else "—"} • '
             + '  '.join(states))
 
 
 def make_link(profile, config):
     host = config.get('public_hostname') or config.get('hostname')
     if not host:
-        raise ValueError('Домен не найден в конфигурации')
+        raise ValueError(tr('Домен не найден в конфигурации', 'Domain not found in configuration'))
     path = config.get('base_path') or ''
     secret = profile['secret'].removeprefix('dd')
     if path:
@@ -155,10 +166,11 @@ class Dialog(ModalScreen):
     #dialog-buttons Button { width: 1fr; margin-right: 1; }
     Input, Select { margin-bottom: 1; }
     '''
-    def __init__(self, title, fields=(), message='', confirm='Применить', cancel='Отмена'):
+    def __init__(self, title, fields=(), message='', confirm=None, cancel=None):
         super().__init__()
         self.title_text, self.fields, self.message, self.confirm = title, fields, message, confirm
-        self.cancel = cancel
+        self.confirm = confirm or tr('Применить', 'Apply')
+        self.cancel = cancel or tr('Отмена', 'Cancel')
 
     def compose(self) -> ComposeResult:
         with Vertical(id='dialog'):
@@ -200,16 +212,20 @@ class TextDialog(ModalScreen):
             yield Label(self.title_text)
             yield TextArea(self.content, read_only=not self.editable, id='text', show_line_numbers=self.editable)
             with Horizontal(id='buttons'):
-                yield Button('Закрыть', id='close')
+                yield Button(tr('Закрыть', 'Close'), id='close')
                 if self.copy:
-                    yield Button('Копировать всё', id='copy', variant='primary')
+                    yield Button(tr('Копировать всё', 'Copy all'), id='copy', variant='primary')
                 if self.editable:
-                    yield Button('Сохранить', id='save', variant='primary')
+                    yield Button(tr('Очистить', 'Clear'), id='clear', variant='warning')
+                    yield Button(tr('Сохранить', 'Save'), id='save', variant='primary')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == 'copy':
             self.app.copy_to_clipboard(self.query_one(TextArea).text)
-            self.app.notify('Отправлено в буфер обмена терминала')
+            self.app.notify(tr('Отправлено в буфер обмена терминала', 'Sent to terminal clipboard'))
+        elif event.button.id == 'clear':
+            self.query_one(TextArea).load_text('')
+            self.query_one(TextArea).focus()
         elif event.button.id == 'save':
             self.dismiss(self.query_one(TextArea).text)
         elif event.button.id == 'close':
@@ -231,31 +247,31 @@ class ProfileDialog(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id='profile-card'):
-            yield Label('Профиль: ' + str(self.profile.get('name', '')), classes='dialog-title')
+            yield Label(tr('Профиль: ', 'Profile: ') + str(self.profile.get('name', '')), classes='dialog-title')
             with VerticalScroll(id='profile-content'):
-                yield Static('Транспорт: ' + str(self.profile.get('carrier_mode', 'https')), markup=False)
+                yield Static(tr('Транспорт: ', 'Transport: ') + str(self.profile.get('carrier_mode', 'https')), markup=False)
                 yield Static('Backend: ' + str(self.profile.get('backend', '')), markup=False)
-                yield Label('Ссылка для подключения')
+                yield Label(tr('Ссылка для подключения', 'Connection link'))
                 if self.link:
                     yield Input(value=self.link, id='profile-link')
                 else:
-                    yield Static('Не удалось сформировать ссылку: ' + self.error, markup=False)
+                    yield Static(tr('Не удалось сформировать ссылку: ', 'Could not create link: ') + self.error, markup=False)
             with Horizontal(id='profile-buttons'):
-                yield Button('Закрыть', id='profile-close')
+                yield Button(tr('Закрыть', 'Close'), id='profile-close')
                 if self.link:
-                    yield Button('Копировать ссылку', id='profile-copy', variant='primary')
+                    yield Button(tr('Копировать ссылку', 'Copy link'), id='profile-copy', variant='primary')
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
         if event.button.id == 'profile-copy':
             self.app.copy_to_clipboard(self.link)
-            self.app.notify('Ссылка отправлена в буфер обмена терминала')
+            self.app.notify(tr('Ссылка отправлена в буфер обмена терминала', 'Link sent to terminal clipboard'))
         elif event.button.id == 'profile-close':
             self.dismiss()
 
 
 class TProxyDashboard(App):
-    TITLE = 'TG-Proxy • Центр управления'
+    TITLE = tr('TG-Proxy • Центр управления', 'TG-Proxy • Control Center')
     CSS = '''
     Screen { layout: vertical; }
     #content { height: 1fr; layout: horizontal; }
@@ -271,7 +287,7 @@ class TProxyDashboard(App):
     .narrow #profiles { width: 100%; height: 40%; }
     .narrow #actions { width: 100%; height: 60%; }
     '''
-    BINDINGS = [('f5', 'refresh_data', 'Обновить'), ('q', 'quit', 'Выход')]
+    BINDINGS = [('f5', 'refresh_data', tr('Обновить', 'Refresh')), ('q', 'quit', tr('Выход', 'Quit'))]
 
     def __init__(self):
         super().__init__()
@@ -281,29 +297,29 @@ class TProxyDashboard(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield Static('Загрузка...', id='status')
-        yield Static('Загрузка сведений о сервере...', id='server-metrics', markup=False)
+        yield Static(tr('Загрузка...', 'Loading...'), id='status')
+        yield Static(tr('Загрузка сведений о сервере...', 'Loading server information...'), id='server-metrics', markup=False)
         with Horizontal(id='content'):
             with Vertical(id='profiles'):
-                yield Label('ПРОФИЛИ — выберите строку', classes='title')
+                yield Label(tr('ПРОФИЛИ — выберите строку', 'PROFILES — select a row'), classes='title')
                 yield DataTable(id='users_table')
             with VerticalScroll(id='actions'):
-                yield Label('УПРАВЛЕНИЕ ВЫБРАННЫМ КЛЮЧОМ', classes='section-title')
-                yield Button('Открыть профиль и ссылку', id='link', variant='primary')
-                yield Button('Изменить транспорт', id='mode', variant='default')
-                yield Button('Удалить ключ', id='delete', variant='error')
-                yield Label('КЛЮЧИ И ССЫЛКИ', classes='section-title')
-                yield Button('Добавить ключ', id='add', variant='success')
-                yield Button('Показать все ссылки', id='links', variant='primary')
-                yield Label('ДОМЕН И САЙТ', classes='section-title')
-                yield Button('Сменить домен', id='domain', variant='default')
-                yield Button('Редактировать сайт', id='site', variant='default')
-                yield Label('СЕРВИС И ОБСЛУЖИВАНИЕ', classes='section-title')
-                yield Button('Состояние и логи', id='diagnostics', variant='default')
-                yield Button('Перезапустить службы', id='restart', variant='warning')
-                yield Button('Полная ротация секретов', id='rotate', variant='warning')
-                yield Button('Обновить ядро', id='update', variant='warning')
-                yield Button('Обновить панель и перезапустить UI', id='self-update', variant='success')
+                yield Label(tr('УПРАВЛЕНИЕ ВЫБРАННЫМ КЛЮЧОМ', 'SELECTED KEY'), classes='section-title')
+                yield Button(tr('Открыть профиль и ссылку', 'Open profile and link'), id='link', variant='primary')
+                yield Button(tr('Изменить транспорт', 'Change transport'), id='mode', variant='default')
+                yield Button(tr('Удалить ключ', 'Delete key'), id='delete', variant='error')
+                yield Label(tr('КЛЮЧИ И ССЫЛКИ', 'KEYS AND LINKS'), classes='section-title')
+                yield Button(tr('Добавить ключ', 'Add key'), id='add', variant='success')
+                yield Button(tr('Показать все ссылки', 'Show all links'), id='links', variant='primary')
+                yield Label(tr('ДОМЕН И САЙТ', 'DOMAIN AND WEBSITE'), classes='section-title')
+                yield Button(tr('Сменить домен', 'Change domain'), id='domain', variant='default')
+                yield Button(tr('Редактировать сайт', 'Edit website'), id='site', variant='default')
+                yield Label(tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), classes='section-title')
+                yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
+                yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
+                yield Button(tr('Полная ротация секретов', 'Rotate all secrets'), id='rotate', variant='warning')
+                yield Button(tr('Обновить ядро', 'Update core'), id='update', variant='warning')
+                yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
         yield Footer()
 
     def on_resize(self, event) -> None:
@@ -311,7 +327,7 @@ class TProxyDashboard(App):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns('№', 'Имя', 'Транспорт', 'Backend')
+        table.add_columns('№', tr('Имя', 'Name'), tr('Транспорт', 'Transport'), 'Backend')
         table.cursor_type, table.zebra_stripes = 'row', True
         self.action_refresh_data()
         self.set_interval(10, self.action_refresh_data)
@@ -328,15 +344,15 @@ class TProxyDashboard(App):
             current_version = version_tuple(current)
             if not tag or (current_version is not None and version_tuple(tag) <= current_version):
                 return
-            message = f'Доступна версия {tag}. '
-            message += f'Установлена: {current}.' if current_version else 'Текущая версия не определена.'
-            message += '\nПосле обновления панель перезапустится.'
-            result = await self.push_screen_wait(Dialog('Доступно обновление', message=message, confirm='Обновить', cancel='Позже'))
+            message = tr(f'Доступна версия {tag}. ', f'Version {tag} is available. ')
+            message += tr(f'Установлена: {current}.', f'Installed: {current}.') if current_version else tr('Текущая версия не определена.', 'Current version is unknown.')
+            message += tr('\nПосле обновления панель перезапустится.', '\nThe panel will restart after updating.')
+            result = await self.push_screen_wait(Dialog(tr('Доступно обновление', 'Update available'), message=message, confirm=tr('Обновить', 'Update'), cancel=tr('Позже', 'Later')))
             if result is not None:
                 if self.busy:
-                    self.notify('Дождитесь завершения операции и обновите панель вручную', severity='warning')
+                    self.notify(tr('Дождитесь завершения операции и обновите панель вручную', 'Wait for the operation to finish, then update the panel manually'), severity='warning')
                 else:
-                    self.run_command('Обновление панели', [CLI_BIN, '--self-update', tag])
+                    self.run_command(tr('Обновление панели', 'Updating panel'), [CLI_BIN, '--self-update', tag])
         except (OSError, ValueError, TypeError, AttributeError):
             # Network failures must not prevent the panel from opening.
             return
@@ -347,20 +363,20 @@ class TProxyDashboard(App):
         try:
             profiles = json.loads(PROFILES_FILE.read_text(encoding='utf-8'))['profiles']
             if not isinstance(profiles, list):
-                raise ValueError('profiles должен быть списком')
+                raise ValueError(tr('profiles должен быть списком', 'profiles must be a list'))
             self.profiles = profiles
             table.clear()
             for index, profile in enumerate(profiles, 1):
                 table.add_row(str(index), str(profile.get('name', '')), str(profile.get('carrier_mode', 'https')), str(profile.get('backend', '')))
             if profiles:
                 table.move_cursor(row=min(cursor, len(profiles) - 1))
-            self.query_one('#status', Static).update(f'Профилей: {len(profiles)} • F5 — обновить' + (' • Выполняется операция...' if self.busy else ''))
+            self.query_one('#status', Static).update(tr(f'Профилей: {len(profiles)} • F5 — обновить', f'Profiles: {len(profiles)} • F5 — refresh') + (tr(' • Выполняется операция...', ' • Operation in progress...') if self.busy else ''))
             if not self.metrics_busy:
                 self.refresh_metrics([dict(profile) for profile in profiles])
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self.profiles = []
             table.clear()
-            self.query_one('#status', Static).update(f'Не удалось прочитать профили: {exc}')
+            self.query_one('#status', Static).update(tr(f'Не удалось прочитать профили: {exc}', f'Could not read profiles: {exc}'))
 
     @work(group='metrics')
     async def refresh_metrics(self, profiles):
@@ -369,14 +385,14 @@ class TProxyDashboard(App):
             metrics = await asyncio.to_thread(collect_server_metrics, profiles)
             self.query_one('#server-metrics', Static).update(metrics)
         except Exception:
-            self.query_one('#server-metrics', Static).update('Сведения о сервере недоступны')
+            self.query_one('#server-metrics', Static).update(tr('Сведения о сервере недоступны', 'Server information unavailable'))
         finally:
             self.metrics_busy = False
 
     def selected(self):
         row = self.query_one(DataTable).cursor_row
         if not self.profiles or row >= len(self.profiles):
-            self.notify('Выберите профиль в таблице', severity='warning')
+            self.notify(tr('Выберите профиль в таблице', 'Select a profile in the table'), severity='warning')
             return None
         return self.profiles[row]
 
@@ -401,7 +417,7 @@ class TProxyDashboard(App):
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         key = event.button.id
         if self.busy:
-            self.notify('Дождитесь завершения операции', severity='warning')
+            self.notify(tr('Дождитесь завершения операции', 'Wait for the operation to finish'), severity='warning')
             return
         if key in ('link', 'links'):
             selected = self.selected() if key == 'link' else None
@@ -414,47 +430,47 @@ class TProxyDashboard(App):
                 config = json.loads(CONFIG_FILE.read_text(encoding='utf-8'))
                 profiles = [selected] if selected else self.profiles
                 if not profiles:
-                    raise ValueError('Нет профилей')
+                    raise ValueError(tr('Нет профилей', 'No profiles'))
                 text = '\n\n'.join((p['name'] + '\n' if key == 'links' else '') + make_link(p, config) for p in profiles)
-                self.push_screen(TextDialog('Ссылки для подключения', text, copy=True))
+                self.push_screen(TextDialog(tr('Ссылки для подключения', 'Connection links'), text, copy=True))
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 self.notify(str(exc), severity='error')
         elif key == 'add':
-            values = await self.push_screen_wait(Dialog('Новый ключ', [('name', 'Имя: латинские буквы, цифры, _ и -', '', None), ('mode', 'Транспорт', 'websocket-lanes', MODES)]))
+            values = await self.push_screen_wait(Dialog(tr('Новый ключ', 'New key'), [('name', tr('Имя: латинские буквы, цифры, _ и -', 'Name: Latin letters, digits, _ and -'), '', None), ('mode', tr('Транспорт', 'Transport'), 'websocket-lanes', MODES)]))
             if values is not None:
                 if not re.fullmatch(r'[A-Za-z0-9_-]+', values['name']):
-                    self.notify('Введите корректное имя', severity='error'); return
-                self.run_command('Создание ключа', [CLI_BIN, 'add', values['name'], values['mode']])
+                    self.notify(tr('Введите корректное имя', 'Enter a valid name'), severity='error'); return
+                self.run_command(tr('Создание ключа', 'Creating key'), [CLI_BIN, 'add', values['name'], values['mode']])
         elif key in ('delete', 'mode'):
             profile = self.selected()
             if not profile: return
             name = profile['name']
             if key == 'delete':
-                values = await self.push_screen_wait(Dialog('Удалить ключ?', message=f'Ключ {name} будет удалён, его ссылка перестанет работать.', confirm='Удалить'))
-                if values is not None: self.run_command('Удаление ключа', [CLI_BIN, 'del', name], 'yes\n')
+                values = await self.push_screen_wait(Dialog(tr('Удалить ключ?', 'Delete key?'), message=tr(f'Ключ {name} будет удалён, его ссылка перестанет работать.', f'Key {name} will be deleted and its link will stop working.'), confirm=tr('Удалить', 'Delete')))
+                if values is not None: self.run_command(tr('Удаление ключа', 'Deleting key'), [CLI_BIN, 'del', name], 'yes\n')
             else:
                 current = profile.get('carrier_mode', 'https')
-                values = await self.push_screen_wait(Dialog('Транспорт: ' + name, [('mode', 'Режим', current if current in MODES else 'https', MODES)]))
-                if values is not None: self.run_command('Изменение транспорта', [CLI_BIN, 'mode', name, values['mode']])
+                values = await self.push_screen_wait(Dialog(tr('Транспорт: ', 'Transport: ') + name, [('mode', tr('Режим', 'Mode'), current if current in MODES else 'https', MODES)]))
+                if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', name, values['mode']])
         elif key == 'domain':
-            values = await self.push_screen_wait(Dialog('Смена домена', [('host', 'Новый домен', '', None), ('email', 'Email для сертификата (необязательно)', '', None)], 'Ссылки изменятся. Проверьте DNS и доступность портов 80 и 443.', 'Продолжить'))
+            values = await self.push_screen_wait(Dialog(tr('Смена домена', 'Change domain'), [('host', tr('Новый домен', 'New domain'), '', None), ('email', tr('Email для сертификата (необязательно)', 'Certificate email (optional)'), '', None)], tr('Ссылки изменятся. Проверьте DNS и доступность портов 80 и 443.', 'Links will change. Check DNS and access to ports 80 and 443.'), tr('Продолжить', 'Continue')))
             if values is not None and values['host'].strip():
-                self.run_command('Смена домена', [CLI_BIN, 'domain', values['host'].strip()], values['email'].strip() + '\nyes\n')
+                self.run_command(tr('Смена домена', 'Change domain'), [CLI_BIN, 'domain', values['host'].strip()], values['email'].strip() + '\nyes\n')
         elif key in ('rotate', 'restart', 'update', 'self-update'):
-            descriptions = {'rotate': 'Все старые ссылки перестанут работать.', 'restart': 'Соединения могут временно прерваться.', 'update': 'Будет обновлено ядро прокси.', 'self-update': 'После обновления интерфейс перезапустится автоматически.'}
-            values = await self.push_screen_wait(Dialog(event.button.label.plain, message=descriptions[key], confirm='Продолжить'))
+            descriptions = {'rotate': tr('Все старые ссылки перестанут работать.', 'All old links will stop working.'), 'restart': tr('Соединения могут временно прерваться.', 'Connections may be temporarily interrupted.'), 'update': tr('Будет обновлено ядро прокси.', 'The proxy core will be updated.'), 'self-update': tr('После обновления интерфейс перезапустится автоматически.', 'The interface will restart automatically after the update.')}
+            values = await self.push_screen_wait(Dialog(event.button.label.plain, message=descriptions[key], confirm=tr('Продолжить', 'Continue')))
             if values is not None:
-                if key == 'restart': self.run_command('Перезапуск служб', ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
+                if key == 'restart': self.run_command(tr('Перезапуск служб', 'Restarting services'), ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
                 else: self.run_command(event.button.label.plain, [CLI_BIN, {'rotate': '--rotate', 'update': '--update', 'self-update': '--self-update'}[key]], 'yes\n' if key == 'rotate' else '')
         elif key == 'diagnostics':
-            self.run_command('Состояние и логи', ['journalctl', '-u', 'tproxy-server', '-u', 'mtproxy', '-u', 'caddy', '--no-pager', '-n', '100'])
+            self.run_command(tr('Состояние и логи', 'Status and logs'), ['journalctl', '-u', 'tproxy-server', '-u', 'mtproxy', '-u', 'caddy', '--no-pager', '-n', '100'])
         elif key == 'site':
             try:
                 content = SITE_FILE.read_text(encoding='utf-8')
-                edited = await self.push_screen_wait(TextDialog('Сайт-заглушка: HTML', content, editable=True))
+                edited = await self.push_screen_wait(TextDialog(tr('Сайт-заглушка: HTML', 'Placeholder website: HTML'), content, editable=True))
                 if edited is not None:
                     SITE_FILE.write_text(edited, encoding='utf-8')
-                    self.notify('Сайт сохранён')
+                    self.notify(tr('Сайт сохранён', 'Website saved'))
             except (OSError, UnicodeError) as exc:
                 self.notify(str(exc), severity='error')
 
@@ -463,20 +479,20 @@ class TProxyDashboard(App):
         self.busy = True
         self.action_refresh_data()
         try:
-            env = dict(os.environ, PROXY_LANG='ru', NO_COLOR='1')
+            env = dict(os.environ, PROXY_LANG=LANG, NO_COLOR='1')
             process = await asyncio.create_subprocess_exec(*command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env)
             output, _ = await process.communicate(input_text.encode())
             text = ANSI.sub('', output.decode('utf-8', errors='replace')).strip()
-            text += f'\n\nКод завершения: {process.returncode}'
-            if title == 'Смена домена' and 'отменена' in text.lower():
-                text += '\nПроверьте DNS: при несовпадении адресов операция отменяется.'
+            text += tr(f'\n\nКод завершения: {process.returncode}', f'\n\nExit code: {process.returncode}')
+            if command[1:2] == ['domain'] and ('отменена' in text.lower() or 'cancelled' in text.lower()):
+                text += tr('\nПроверьте DNS: при несовпадении адресов операция отменяется.', '\nCheck DNS: the operation is cancelled if addresses do not match.')
             if command[:2] == [CLI_BIN, '--self-update'] and process.returncode == 0:
-                self.notify('Панель обновлена. Перезапуск интерфейса…')
+                self.notify(tr('Панель обновлена. Перезапуск интерфейса…', 'Panel updated. Restarting the interface…'))
                 await asyncio.sleep(1)
                 os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
-            self.push_screen(TextDialog(title, text or 'Готово', copy=True))
+            self.push_screen(TextDialog(title, text or tr('Готово', 'Done'), copy=True))
         except OSError as exc:
-            self.notify(f'Не удалось запустить операцию: {exc}', severity='error')
+            self.notify(tr(f'Не удалось запустить операцию: {exc}', f'Could not start operation: {exc}'), severity='error')
         finally:
             self.busy = False
             self.action_refresh_data()
