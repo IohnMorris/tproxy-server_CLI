@@ -584,7 +584,7 @@ class TProxyDashboard(App):
                 if values is not None: self.run_command(tr('Удаление ключа', 'Deleting key'), [CLI_BIN, 'del', name], 'yes\n')
             elif key == 'mode':
                 current = profile.get('carrier_mode', 'https')
-                values = await self.push_screen_wait(Dialog(tr('Транспорт: ', 'Transport: ') + name, [('mode', tr('Режим', 'Mode'), current if current in MODES else 'https', MODES)]))
+                values = await self.push_screen_wait(Dialog(tr('Транспорт: ', 'Transport: ') + name, [('mode', tr('Режим', 'Mode'), current if current in MODES else 'https', MODES)], message=tr('Изменится только транспорт. Ссылка подключения останется прежней.', 'Only the transport will change. The connection link will stay the same.')))
                 if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', name, values['mode']])
             else:
                 rotate = key == 'rotate-user'
@@ -593,7 +593,7 @@ class TProxyDashboard(App):
                 if values is not None:
                     self.run_command(tr('Обновление ключа', 'Updating key'), [CLI_BIN, 'ui-rotate-user' if rotate else 'ui-reset-traffic', name], 'yes\n' if rotate else '')
         elif key == 'mode-all':
-            values = await self.push_screen_wait(Dialog(tr('Изменить транспорт для всех ключей', 'Change transport for all keys'), [('mode', tr('Режим', 'Mode'), 'https', MODES)]))
+            values = await self.push_screen_wait(Dialog(tr('Изменить транспорт для всех ключей', 'Change transport for all keys'), [('mode', tr('Режим', 'Mode'), 'https', MODES)], message=tr('Изменится только транспорт. Все ссылки подключения останутся прежними.', 'Only the transport will change. All connection links will stay the same.')))
             if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', 'all', values['mode']])
         elif key in ('rotate-secrets', 'rotate-path', 'set-path'):
             fields = [('path', tr('Новый путь без слешей (пусто — корень)', 'New path without slashes (empty for root)'), '', None)] if key == 'set-path' else []
