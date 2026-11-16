@@ -1941,6 +1941,62 @@ launch_ui() {
 }
 
 case "${1:-}" in
+  ui-uninstall)
+    printf '%s\n' "$(tr_text 'Удаление прокси, всех ключей, статистики и сайта. Введите DELETE для подтверждения:' 'Remove the proxy, all keys, traffic data and website. Type DELETE to confirm:')"
+    IFS= read -r ui_confirmation || ui_confirmation=""
+    [[ "$ui_confirmation" == DELETE ]] || { printf '%s\n' "$(tr_text 'Удаление отменено.' 'Uninstall cancelled.')"; exit 1; }
+    ui_failed=0
+    for ui_service in refresh-mtproxy-config.timer refresh-mtproxy-config.service tproxy-server.service mtproxy.service tproxy-firewall.service; do
+      systemctl disable --now "$ui_service" 2>/dev/null || { systemctl is-active --quiet "$ui_service" && ui_failed=1 || true; }
+    done
+    if (( ui_failed != 0 )); then
+      red "$(tr_text 'Не удалось остановить службы. Файлы и правила сохранены.' 'Could not stop services. Files and firewall rules were retained.')"
+      exit 1
+    fi
+    nft delete table inet tg_proxy_stats 2>/dev/null || { nft list table inet tg_proxy_stats >/dev/null 2>&1 && ui_failed=1 || true; }
+    nft delete table inet tproxy_backend 2>/dev/null || { nft list table inet tproxy_backend >/dev/null 2>&1 && ui_failed=1 || true; }
+    # The upstream installer saves a prior Caddyfile and unit before replacing them.
+    # Restore only when the active file still matches the project's installed copy.
+    ui_caddy_changed=0
+    for ui_caddy_target in /etc/caddy/Caddyfile /etc/systemd/system/caddy.service; do
+      ui_expected="$INSTALL_DIR/deploy/Caddyfile"
+      [[ "$ui_caddy_target" == /etc/systemd/system/caddy.service ]] && ui_expected="$INSTALL_DIR/deploy/caddy.service"
+      if [[ -f "$ui_caddy_target" && -f "$ui_expected" ]] && cmp -s "$ui_caddy_target" "$ui_expected"; then
+        if [[ "$ui_caddy_target" == /etc/systemd/system/caddy.service ]]; then
+          systemctl disable --now caddy.service || { ui_failed=1; continue; }
+        fi
+        ui_backup="$(find "$(dirname "$ui_caddy_target")" -maxdepth 1 -type f -name "$(basename "$ui_caddy_target").before-tproxy.*" -print | LC_ALL=C sort | head -n 1)"
+        if [[ -n "$ui_backup" ]]; then
+          cp -p -- "$ui_backup" "$ui_caddy_target" || ui_failed=1
+        else
+          rm -f -- "$ui_caddy_target" || ui_failed=1
+        fi
+        ui_caddy_changed=1
+      elif [[ -e "$ui_caddy_target" ]]; then
+        yellow "$(tr_text "Изменённый файл Caddy сохранён: $ui_caddy_target; проверьте его вручную." "Modified Caddy file retained: $ui_caddy_target; review it manually.")"
+      fi
+    done
+    for ui_file in /etc/systemd/system/tproxy-server.service /etc/systemd/system/mtproxy.service /etc/systemd/system/tproxy-firewall.service /etc/systemd/system/refresh-mtproxy-config.service /etc/systemd/system/refresh-mtproxy-config.timer /etc/systemd/system/tproxy-server.service.d/profiles.conf /etc/systemd/system/mtproxy.service.d/multi-profile.conf /etc/systemd/system/mtproxy.service.d/multi-secret.conf /usr/local/bin/tproxy-server /usr/local/sbin/refresh-mtproxy-config; do
+      rm -f -- "$ui_file" || ui_failed=1
+    done
+    rm -rf -- /etc/tproxy-server /etc/mtproxy /opt/tproxy-server /opt/MTProxy /srv/tproxy-site || ui_failed=1
+    rm -f -- /etc/systemd/system/caddy.service.d/tproxy.conf /etc/caddy/Caddyfile.tproxy || ui_failed=1
+    systemctl daemon-reload || ui_failed=1
+    if (( ui_caddy_changed )); then
+      if [[ -f /etc/caddy/Caddyfile ]] && systemctl cat caddy.service >/dev/null 2>&1; then
+        systemctl enable --now caddy.service || ui_failed=1
+        systemctl restart caddy.service || ui_failed=1
+      else
+        systemctl disable --now caddy.service 2>/dev/null || true
+      fi
+    fi
+    if (( ui_failed != 0 )); then
+      red "$(tr_text 'Удаление выполнено не полностью. Проверьте сообщения и повторите удаление.' 'Uninstall was incomplete. Check the errors and retry.')"
+      exit 1
+    fi
+    rm -f -- "$ALIAS_PATH" "$CLI_PATH" "$UI_PATH" || exit 1
+    printf '%s\n' "$(tr_text 'Файлы прокси удалены. Резервные копии Caddy, общесистемные пакеты, Go и системные пользователи сохранены.' 'Proxy files removed. Caddy backups, shared packages, Go and system users were retained.')"
+    ;;
   ui-rotate-user|ui-reset-traffic)
     ensure_profiles_structure
     ui_name="${2:-}"

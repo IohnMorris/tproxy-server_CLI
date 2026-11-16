@@ -379,6 +379,7 @@ class TProxyDashboard(App):
                 with Collapsible(title=tr('ОБНОВЛЕНИЯ', 'UPDATES'), collapsed=True):
                     yield Button(tr('Обновить ядро', 'Update core'), id='update')
                     yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
+                    yield Button(tr('Удалить прокси с сервера', 'Uninstall proxy from server'), id='uninstall', variant='error')
         yield Footer()
 
     def on_resize(self, event) -> None:
@@ -559,6 +560,14 @@ class TProxyDashboard(App):
             if values is not None:
                 if key == 'restart': self.run_command(tr('Перезапуск служб', 'Restarting services'), ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
                 else: self.run_command(event.button.label.plain, [CLI_BIN, {'rotate': '--rotate', 'update': '--update', 'self-update': '--self-update'}[key]], 'yes\n' if key == 'rotate' else '')
+        elif key == 'uninstall':
+            message = tr('Будут удалены прокси, ключи, статистика, настройки и сайт. Службы остановятся, ссылки перестанут работать. Действие необратимо. Конфигурация Caddy будет восстановлена из резервной копии, если она не изменялась после установки; изменённые файлы и общие компоненты сохранятся. Введите DELETE для подтверждения.', 'The proxy, keys, statistics, settings and website will be deleted. Services will stop and links will stop working. This cannot be undone. The previous Caddy configuration will be restored if the installed files are unchanged; modified files and shared components will be retained. Type DELETE to confirm.')
+            values = await self.push_screen_wait(Dialog(tr('Полное удаление прокси', 'Uninstall proxy'), [('confirmation', tr('Введите DELETE', 'Type DELETE'), '', None)], message, tr('Удалить', 'Uninstall')))
+            if values is not None:
+                if values['confirmation'] != 'DELETE':
+                    self.notify(tr('Подтверждение не совпадает. Удаление отменено.', 'Confirmation did not match. Uninstall cancelled.'), severity='warning')
+                    return
+                self.run_command(tr('Удаление прокси', 'Uninstalling proxy'), [CLI_BIN, 'ui-uninstall'], 'DELETE\n')
         elif key == 'language':
             values = await self.push_screen_wait(Dialog(tr('Язык панели', 'Panel language'), [('language', tr('Выберите язык', 'Select language'), LANG, ('ru', 'en'))], tr('Интерфейс перезапустится на выбранном языке.', 'The interface will restart in the selected language.')))
             if values is not None:
@@ -616,6 +625,10 @@ class TProxyDashboard(App):
                 self.notify(tr('Обновление завершено. Перезапуск панели…', 'Update complete. Restarting the panel…'))
                 await asyncio.sleep(1)
                 os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
+            if command[:2] == [CLI_BIN, 'ui-uninstall'] and process.returncode == 0:
+                await self.push_screen_wait(TextDialog(title, text, copy=True))
+                self.exit()
+                return
             self.push_screen(TextDialog(title, text or tr('Готово', 'Done'), copy=True))
         except OSError as exc:
             self.notify(tr(f'Не удалось запустить операцию: {exc}', f'Could not start operation: {exc}'), severity='error')
