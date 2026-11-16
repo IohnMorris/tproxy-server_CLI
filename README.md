@@ -25,6 +25,27 @@ TG-Proxy устанавливает и помогает управлять [Tele
 - Диагностика, снимок процессов, перезапуск служб, лимиты MTProxy и настройки маршрутизации.
 - Проверка версии панели по тегам и коммита ядра при запуске; доступные обновления можно установить вместе. После успешного обновления интерфейс перезапускается.
 
+### Транспорт
+
+Транспорт определяет, как клиент обменивается данными с прокси. Режим можно выбрать при создании ключа или изменить позже для одного либо всех ключей; ссылка при этом сохраняется.
+
+| Режим | Как работает | Когда попробовать |
+| --- | --- | --- |
+| `https` | Один POST и один long-poll для обмена данными. | Базовый вариант для совместимости. |
+| `https-lanes` | Независимые POST и long-poll для отдельных потоков через HTTP/2. | Если нужна изоляция потоков или WebSocket недоступен. |
+| `websocket` | Один общий WebSocket для потоков. | Если сеть поддерживает WebSocket и хочется использовать меньше соединений. |
+| `websocket-lanes` | Отдельный WebSocket для каждого потока. | Для изоляции потоков, например чата и передачи медиа. |
+
+Совместимость и скорость зависят от сети клиента: при проблемах попробуйте другой режим. При установке по умолчанию используется `https`.
+
+### Лимиты и маршрутизация
+
+Эти параметры доступны в разделе **«Сервис и обслуживание» → «Лимиты и маршруты»**.
+
+- **Воркеры (Workers)** — число рабочих процессов MTProxy. Дополнительные процессы могут помочь при высокой нагрузке, но потребляют CPU и RAM. Для VPS с 1 vCPU начните с `1` и меняйте значение по результатам наблюдения за нагрузкой.
+- **Максимум соединений (Max Connections)** — лимит, передаваемый MTProxy для каждого воркера. Увеличение лимита само по себе не ускоряет прокси: фактическая ёмкость зависит от CPU, памяти и сети. Начальное значение — `4096`.
+- **Маршрутизация статики (Static Routing)** — режим обработки путей статического сайта: `exact` использует точное сопоставление, `legacy` сохраняет совместимость со старой логикой. Используйте `exact`, если обратная совместимость не требуется.
+
 ### Требования и установка
 
 Нужен сервер Ubuntu 22.04+ или Debian 12+ (`x86_64`), доступ `root` или `sudo`, домен с A-записью на IP сервера и свободные порты 80 и 443.
@@ -82,6 +103,27 @@ TG-Proxy installs and manages [Telegram Web Proxy](https://github.com/telegramde
 - View CPU, RAM, disk, load, service status, total traffic and estimated online users. Online counts are estimates based on TCP connections; traffic is cumulative, not monthly.
 - Inspect diagnostics and a process snapshot, restart services, and configure MTProxy limits and routing.
 - Check for panel tags and new upstream core commits at startup. Available updates can be installed together; the interface restarts after a successful update.
+
+### Transport
+
+The transport controls how a client exchanges data with the proxy. Choose a mode when creating a key or change it later for one or all keys; the connection link stays the same.
+
+| Mode | How it works | When to try it |
+| --- | --- | --- |
+| `https` | One POST and one long-poll for data exchange. | A basic compatibility option. |
+| `https-lanes` | Independent POST and long-poll requests for separate streams over HTTP/2. | When stream isolation is useful or WebSockets are unavailable. |
+| `websocket` | One shared WebSocket for streams. | When the network supports WebSockets and fewer connections are desirable. |
+| `websocket-lanes` | A separate WebSocket for each stream. | To isolate streams, such as chat and media transfers. |
+
+Compatibility and speed depend on the client's network; try another mode if you encounter problems. The installer defaults to `https`.
+
+### Limits and routing
+
+These settings are under **Service and maintenance → Limits and routes**.
+
+- **Workers** is the number of MTProxy worker processes. More processes can help under heavy load, but consume CPU and RAM. For a 1-vCPU VPS, start with `1` and adjust after observing the load.
+- **Max Connections** is the connection limit passed to MTProxy for each worker. Increasing it does not make the proxy faster by itself; actual capacity depends on CPU, memory and network bandwidth. A starting value is `4096`.
+- **Static Routing** controls how static website paths are matched: `exact` uses exact matching, while `legacy` preserves compatibility with the older behavior. Use `exact` unless backward compatibility is needed.
 
 ### Requirements and installation
 
