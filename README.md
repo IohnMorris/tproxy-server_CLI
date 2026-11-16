@@ -13,6 +13,8 @@
 
 TG-Proxy устанавливает и помогает управлять [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy и Caddy на сервере Linux. Панель работает в терминале по SSH, поддерживает русский и английский языки и позволяет выполнять основные действия в окнах интерфейса.
 
+![Панель TG-Proxy на русском языке](assets/panel-ru.png)
+
 ### Возможности
 
 - Таблица профилей: выберите строку мышью или клавишей Enter, чтобы открыть карточку с ссылкой и статистикой. Ссылку можно скопировать через буфер обмена терминала.
@@ -75,6 +77,8 @@ git push origin v1.2.3
 ## English
 
 TG-Proxy installs and manages [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy and Caddy on a Linux server. Its SSH-friendly terminal dashboard supports Russian and English.
+
+![TG-Proxy dashboard in English](assets/panel-en.png)
 
 ### Features
 
