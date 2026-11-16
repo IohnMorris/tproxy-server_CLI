@@ -1,326 +1,108 @@
-# 🚀 Telegram WEB Proxy Auto-Installer & CLI Panel
+<div align="center">
+  <img src="assets/logo.svg" alt="TG-Proxy Control Panel" width="680">
 
-[Русский](#русский) | [English](#english)
+  **Терминальная панель управления Telegram Web Proxy**<br>
+  **A terminal control panel for Telegram Web Proxy**
+
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+  [Русский](#русский) · [English](#english)
+</div>
 
 ## Русский
 
-Автоматический скрипт для быстрого развертывания и удобного управления официальным [Telegram WEB Proxy (tproxy-server)](https://github.com/telegramdesktop/tproxy-server).
+TG-Proxy устанавливает и помогает управлять [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy и Caddy на сервере Linux. Панель работает в терминале по SSH, поддерживает русский и английский языки и позволяет выполнять основные действия в окнах интерфейса.
 
-Скрипт превращает сложную настройку релея, MTProxy, nftables и веб-сервера Caddy в **интерактивную панель управления** в терминале. Он сам генерирует криптостойкие ключи, получает SSL-сертификаты, считает трафик и онлайн по каждому пользователю, позволяет на лету менять транспорт (включая **WebSocket**) и выдаёт готовые ссылки для подключения в Telegram.
+### Возможности
 
----
+- Таблица профилей: выберите строку мышью или клавишей Enter, чтобы открыть карточку с ссылкой и статистикой. Ссылку можно скопировать через буфер обмена терминала.
+- Создание и удаление ключей, смена транспорта для одного или всех ключей; поддерживаются `https`, `https-lanes`, `websocket`, `websocket-lanes`.
+- Перевыпуск секрета, сброс трафика, смена пути и полная ротация с подтверждением.
+- Смена домена с проверкой DNS и настройкой сертификата Caddy. Редактор HTML заглушки умеет очищать содержимое и сохранять новый сайт.
+- Сводка CPU, RAM, диска, нагрузки, статуса служб, общего трафика и примерного онлайна. Число пользователей оценивается по TCP-соединениям; трафик показывается общим счётчиком, а не помесячно.
+- Диагностика, снимок процессов, перезапуск служб, лимиты MTProxy и настройки маршрутизации.
+- Проверка версии панели по тегам и коммита ядра при запуске; доступные обновления можно установить вместе. После успешного обновления интерфейс перезапускается.
 
-## ✨ Особенности
+### Требования и установка
 
-- **🖥 Удобная CLI-панель (`sudo proxy`)**: управление ключами, доменом, сайтом-заглушкой и сервером через наглядное меню без ручного редактирования JSON-конфигов.
-- **⚡ Все режимы транспорта (`carrier_mode`)**: полная поддержка `https`, `https-lanes`, `websocket` и `websocket-lanes` с возможностью переключения на лету (даже на уже созданных ключах без смены ссылки).
-- **👥 Мульти-пользовательский режим**: создавайте отдельные ключи для разных устройств, друзей или клиентов.
-- **📊 Учет трафика и онлайна в реальном времени**: подсчет скачанных/отданных гигабайт (`RX`/`TX`) через `nftables` (сохраняется при перезагрузках) и отображение активных подключений по каждому ключу.
-- **🌐 Смена домена в 1 клик**: встроенный мастер проверяет DNS A-запись, перенастраивает Caddy и автоматически выпускает новый сертификат Let's Encrypt.
-- **🛡 Маскировка под обычный сайт (обход DPI)**: автоматическая генерация секретного пути (`base_path` slug) и встроенный редактор сайта-заглушки прямо из панели.
-- **🔄 Безопасная ротация**: смена секретов или `base_path` для одного или сразу всех ключей с защитой от случайного нажатия.
-
----
-
-## 📋 Требования
-
-- **ОС:** Ubuntu 22.04+ или Debian 12+ (архитектура `x86_64`).
-- **Права:** `root` (или пользователь с `sudo`).
-- **Домен:** Привязанный к IP-адресу вашего сервера (A-запись).
-- **Чистый сервер:** порты `80` и `443` не должны быть заняты другими веб-серверами (Nginx, Apache и т.д.).
-
----
-
-## 🛠 Установка (Одной командой)
-
-Подключитесь к вашему серверу по SSH и выполните:
+Нужен сервер Ubuntu 22.04+ или Debian 12+ (`x86_64`), доступ `root` или `sudo`, домен с A-записью на IP сервера и свободные порты 80 и 443.
 
 ```bash
 sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
 ```
 
-Во время установки скрипт спросит язык, домен, email для сертификата и желаемый режим транспорта. Если пропустить выбор транспорта, будет использован `https` для максимальной совместимости. После этого скрипт настроит сервисы и выведет готовую ссылку вида `https://t.me/webproxy?...`.
-
----
-
-## 🎛 Управление через интерактивную панель
-
-Новая терминальная панель показывает профили и кнопки основных действий. Для операций с подтверждениями она временно открывает штатный CLI, затем возвращается в панель. Дополнительные настройки, диагностика и ротация доступны через «Все настройки и диагностика». Обновление панели находится в разделе «Обслуживание»; после обновления закройте и снова запустите `sudo proxy`.
-
-После установки управление прокси доступно из любой точки системы по короткой команде:
+Мастер запросит язык, домен, email сертификата и транспорт. После установки запустите панель:
 
 ```bash
 sudo proxy
 ```
 
-(или `sudo tg-proxy`)
+В верхней части показана сводка, слева — профили, справа — действия. Раздел выбранного ключа открыт при запуске; остальные разделы можно раскрывать по мере необходимости. `F5` обновляет данные, `Q` закрывает панель. Доступна смена темы через командную палитру (`Ctrl+P`).
 
-**Что умеет панель управления:**
+Копирование ссылки использует возможности SSH-терминала: поддержка буфера обмена зависит от клиента и его настроек. Если копирование недоступно, выделите ссылку мышью и скопируйте средствами терминала.
 
-В верхней части панели всегда отображается живая сводка сервера: нагрузка на CPU, потребление RAM, место на диске, статус служб (tproxy, mtproxy, caddy, readyz), общий трафик и текущий онлайн.
-
-### 1. 🔑 Управление ключами и трафиком (пункты 1, 2, 3)
-
-- **Таблица всех ключей:** показывает имя ключа, выбранный транспорт (MODE), сколько человек сейчас онлайн, а также статистику трафика (RX / TX / TOTAL) и готовые ссылки для Telegram.
-- **Карточка отдельного ключа:** внутри таблицы введите номер ключа (1..N), чтобы открыть детальную информацию, обнулить счетчик трафика ([Z]), перевыпустить секрет ([R]) или сменить транспорт ([M]).
-- **Создание и удаление:** добавляйте новые ключи в пару нажатий — скрипт сам выделит локальный порт и перезапустит сервисы без обрыва связи.
-
-### 2. 🚀 Выбор и смена транспорта ([M] — Carrier Mode)
-
-Вы можете выбрать режим работы как при создании ключа, так и изменить его для уже существующих ключей (при этом клиентская ссылка в Telegram остаётся прежней!).
-
-| Режим | Описание | Когда выбирать |
-| --- | --- | --- |
-| `websocket-lanes` | Отдельный WebSocket на каждый логический поток | Максимальная скорость и отзывчивость. Скачивание тяжелых видео и файлов не блокирует текстовые сообщения. |
-| `websocket` | Один общий упорядоченный WebSocket для всех потоков | Убирает задержки HTTP stop-and-wait, экономит количество соединений. |
-| `https-lanes` | Независимые POST и long-poll запросы поверх HTTP/2 | Отличная альтернатива, если на сети клиента режутся WebSocket-соединения. |
-| `https` (по умолчанию) | Классический 1 POST + 1 long-poll | Консервативный базовый режим для максимальной совместимости со старыми сетями. |
-
-### 3. 🌐 Смена домена и перевыпуск SSL ([D])
-
-Если ваш старый домен попал в блок или вы решили переехать на новый:
-
-1. Нажмите D в главном меню и введите новый домен.
-2. Панель сама проверит, указывает ли DNS A-запись на IP вашего сервера.
-3. Обновит конфиги Caddy, дождётся получения нового сертификата Let's Encrypt и выдаст обновлённые ссылки (сохранив все ваши ключи и статистику трафика).
-
-### 4. 🔐 Ротация секретов и секретного пути (4, 5)
-
-Позволяет сменить секретный путь (`base_path`), по которому отвечает прокси (например, `https://domain.com/a7f3k9...`), либо задать свой собственный путь вручную.
-
-Поддерживает как точечную смену секрета одному пользователю, так и полную экстренную ротацию всех ключей и путей одной кнопкой.
-
-### 5. 🎨 Управление сайтом-заглушкой (8)
-
-Нажмите 8, чтобы прямо из панели открыть HTML-код вашего прикрытия (`/srv/tproxy-site/index.html`) во встроенном редакторе nano или сбросить его на шаблон по умолчанию.
-
-### 6. ⚙️ Обновление, Тюнинг и Мониторинг (6, 7, 9, H, L, R)
-
-- **6 — Обновить ядро tproxy-server:** скачивает свежий коммит официального репозитория Telegram, пересобирает бинарник с сохранением всех ваших профилей и настроек.
-- **7 — Обновить панель tg-proxy:** в 1 клик скачивает свежую версию самого скрипта управления с GitHub.
-- **9 — Лимиты и воркеры:** настройка числа воркеров `MTPROXY_WORKERS`, лимита соединений `MTPROXY_MAX_CONNECTIONS` и режима маршрутизации статики (exact / legacy).
-- **H — Монитор ресурсов (htop):** запуск интерактивного диспетчера задач.
-- **L — Диагностика:** автоматическая валидация конфигов (`tproxy-server -check`), срез внутренней статистики MTProxy и вывод последних логов.
-
----
-
-## ⚡ Быстрые CLI-команды (без входа в меню)
-
-Управлять прокси можно напрямую одной строкой в терминале:
+### Команды
 
 ```bash
-# Открыть интерактивную панель управления
-sudo proxy
-
-# Показать таблицу ключей, онлайн, трафик и ссылки подключения
-sudo proxy users
-
-# Создать новый ключ (с выбором режима или указанием сразу)
-sudo proxy add ivan websocket-lanes
-sudo proxy add iphone ws
-
-# Сменить транспорт для одного ключа (по имени или номеру) без смены ссылки
-sudo proxy mode ivan websocket-lanes
-sudo proxy mode 1 https-lanes
-
-# Переключить СРАЗУ ВСЕ ключи на WebSocket-Lanes одной командой
-sudo proxy mode all websocket-lanes
-
-# Удалить ключ
-sudo proxy del ivan
-
-# Сменить домен прокси и автоматически получить новый SSL-сертификат
-sudo proxy domain new-proxy.example.com
-
-# Открыть редактор сайта-заглушки в nano
-sudo proxy site
-
-# Полная ротация секретного пути и всех ключей
-sudo proxy --rotate
-
-# Обновить ядро tproxy-server до последней версии
-sudo proxy --update
-
-# Обновить сам скрипт панели управления с GitHub
-sudo proxy --self-update
-
-# Показать справку по всем командам
-sudo proxy --help
+sudo proxy                          # Открыть панель
+sudo proxy users                    # Ключи, трафик и ссылки
+sudo proxy add ivan websocket-lanes # Добавить ключ
+sudo proxy mode ivan https-lanes    # Сменить транспорт ключа
+sudo proxy mode all websocket      # Сменить транспорт всех ключей
+sudo proxy del ivan                 # Удалить ключ
+sudo proxy domain example.com      # Сменить домен
+sudo proxy site                    # Редактор сайта в CLI
+sudo proxy --rotate                # Ротация пути и всех секретов
+sudo proxy --update                # Обновить ядро
+sudo proxy --self-update           # Обновить панель из main
+sudo proxy --self-update v1.0.0    # Установить панель из тега
+sudo proxy --help                  # Справка
 ```
 
----
+При интерактивном запуске выберите язык; для неинтерактивных команд можно указать `PROXY_LANG=ru` или `PROXY_LANG=en`. Сайт хранится в `/srv/tproxy-site/index.html`. После изменения HTML через панель службы перезапускаются. Смена секрета или пути делает соответствующие старые ссылки недействительными.
 
-## 🛡 Важно для обхода блокировок (DPI)
+### Выпуск версии
 
-Для надежной маскировки трафика от систем анализа провайдеров (DPI) ваш сервер должен открываться в браузере как обычный живой сайт. Во время установки скрипт создает базовую страницу в папке `/srv/tproxy-site/index.html`.
-
-Рекомендуется заменить заглушку на полноценную страницу:
-
-Вызовите редактор прямо через панель:
+Панель проверяет числовые теги формата `v1.2.3`. После коммита и отправки кода создайте и отправьте тег:
 
 ```bash
-sudo proxy site
+git tag -a v1.2.3 -m "TG-Proxy v1.2.3"
+git push origin v1.2.3
 ```
 
-и вставьте сгенерированный через ИИ одностраничный HTML-лендинг (с CSS-стилями внутри файла).
-
-Либо загрузите многостраничный шаблон: скачайте любой бесплатный HTML-шаблон и загрузите файлы в директорию `/srv/tproxy-site/` на сервере (например, через SFTP), убедившись, что главный файл называется `index.html`.
-
----
-
-## 🔧 Системные команды (Systemd)
-
-При необходимости вы также можете управлять службами напрямую через systemctl (либо использовать пункт R и L внутри `sudo proxy`):
-
-**Проверить статус всех служб:**
-
-```bash
-sudo systemctl status tproxy-server mtproxy caddy
-```
-
-**Перезапустить сервисы:**
-
-```bash
-sudo systemctl restart tproxy-server mtproxy caddy
-```
-
-**Посмотреть подробные логи:**
-
-```bash
-sudo journalctl -u tproxy-server -u mtproxy -n 50 --no-pager
-sudo journalctl -u caddy -n 50 --no-pager
-```
-
----
+Чтобы версия отображалась в разделе Releases на GitHub, создайте релиз на основе этого тега. Тег должен содержать оба файла: `install.sh` и `tproxy_ui.py`.
 
 ## English
 
-# 🚀 Telegram WEB Proxy Auto-Installer & CLI Panel
+TG-Proxy installs and manages [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy and Caddy on a Linux server. Its SSH-friendly terminal dashboard supports Russian and English.
 
-Automatically deploy and manage the official [Telegram WEB Proxy (tproxy-server)](https://github.com/telegramdesktop/tproxy-server). The script turns relay, MTProxy, nftables and Caddy setup into an interactive terminal panel. It generates strong secrets, issues TLS certificates, tracks traffic and online connections, supports multiple users, and prints ready-to-use Telegram links.
+### Features
 
----
+- Select a profile with the mouse or Enter to open its connection link and statistics. Links can be copied through the terminal clipboard.
+- Create and delete keys; change one or all transports between `https`, `https-lanes`, `websocket` and `websocket-lanes`.
+- Rotate individual or all secrets, reset traffic, and change the proxy path, with confirmation for sensitive operations.
+- Change the domain and TLS certificate, or edit, clear and restore the placeholder HTML page.
+- View CPU, RAM, disk, load, service status, total traffic and estimated online users. Online counts are estimates based on TCP connections; traffic is cumulative, not monthly.
+- Inspect diagnostics and a process snapshot, restart services, and configure MTProxy limits and routing.
+- Check for panel tags and new upstream core commits at startup. Available updates can be installed together; the interface restarts after a successful update.
 
-## ✨ Features
+### Requirements and installation
 
-- **🖥 Interactive CLI panel (`sudo proxy`)** for keys, domains, the placeholder website and services without editing JSON by hand.
-- **⚡ Four transport modes (`carrier_mode`)**: `https`, `https-lanes`, `websocket` and `websocket-lanes`. You can switch a key's mode later without changing its Telegram link.
-- **👥 Multiple users**: create separate keys for phones, computers, friends or customers.
-- **📊 Traffic and online statistics**: RX/TX counters through `nftables`, persisted across restarts, plus estimated active users per key.
-- **🌐 One-click domain changes**: DNS A-record validation, Caddy reconfiguration and automatic Let's Encrypt certificate issuance.
-- **🛡 DPI camouflage**: a random secret `base_path` and an editable website served by Caddy.
-- **🔄 Safe rotation**: rotate one key or all secrets and paths with an explicit confirmation.
-- **🧰 Maintenance tools**: update tproxy-server, update the panel, tune workers and limits, inspect diagnostics and restart services.
-
----
-
-## 📋 Requirements
-
-- **OS:** Ubuntu 22.04+ or Debian 12+ on `x86_64`.
-- **Privileges:** `root` or a user with `sudo`.
-- **Domain:** an A record pointing to the server's public IP.
-- **Clean ports:** ports `80` and `443` must be available; stop Nginx, Apache or another web server before installation.
-
----
-
-## 🛠 Installation (one command)
-
-Connect to the server over SSH and run:
+Use Ubuntu 22.04+ or Debian 12+ (`x86_64`), with `root` or `sudo`, a domain A record pointing at the server, and ports 80 and 443 available.
 
 ```bash
 sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
+sudo proxy
 ```
 
-The installer asks for a language, domain, certificate email and transport. If you skip the transport selection, it uses `https` for maximum compatibility. It then installs the required packages, deploys the official tproxy-server, configures MTProxy, nftables and Caddy, and prints a Telegram link such as `https://t.me/webproxy?...`.
+The installer asks for a language, domain, certificate email and transport. The dashboard shows server metrics at the top, profiles on the left and actions on the right. The selected-key section starts open; other sections expand on demand. Press `F5` to refresh, `Q` to quit, or `Ctrl+P` to choose a theme. Clipboard support depends on your SSH terminal.
 
-Interactive sessions offer **Русский** and **English**. For scripts or automation, select a language explicitly:
+The command examples above also apply in English. Set `PROXY_LANG=en` for non-interactive commands. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
 
-```bash
-sudo PROXY_LANG=en proxy --help
-sudo PROXY_LANG=ru proxy --help
-```
+### Releases
 
-Non-interactive calls default to Russian when `PROXY_LANG` is not set.
+The panel checks numeric tags such as `v1.2.3`. Commit and push both `install.sh` and `tproxy_ui.py`, then create and push a tag as shown above. Create a GitHub Release from the tag to display it in the repository's Releases section.
 
----
+## License / Лицензия
 
-## 🎛 Interactive control panel
-
-After installation, open the panel with `sudo proxy` or `sudo tg-proxy`. The header shows CPU, RAM, disk usage, service status (`tproxy`, `mtproxy`, `caddy`, `readyz`), total traffic and estimated online users.
-
-### 1. 🔑 Keys, links and traffic (1, 2, 3)
-
-The key table shows each name, transport, estimated online users, RX/TX/TOTAL traffic and Telegram link. Select a key by number (`1..N`) to view details, reset traffic (`Z`), regenerate its secret (`R`) or change transport (`M`). Add or delete keys in a few prompts; the script allocates a local port and synchronizes services. The last remaining key cannot be deleted.
-
-### 2. 🚀 Choosing and changing transport (`M` — Carrier Mode)
-
-Select a mode when creating a key or change it later; the Telegram link remains the same.
-
-| Mode | Description | When to choose it |
-| --- | --- | --- |
-| `websocket-lanes` | Separate WebSocket for each logical stream | Best responsiveness; downloads do not block messages. |
-| `websocket` | One ordered WebSocket for all streams | Fewer connections and no HTTP stop-and-wait pauses. |
-| `https-lanes` | Independent POST and long-poll over HTTP/2 | When the client's network blocks WebSockets. |
-| `https` **(default)** | Classic one POST plus one long-poll | Conservative compatibility mode for older networks. |
-
-Shortcuts include `ws`, `ws-lanes`, `lanes`, and numeric choices `1`–`4`.
-
-### 3. 🌐 Changing the domain and TLS (`D`)
-
-Press `D`, enter the new domain, and let the panel validate its DNS A record, update Caddy and request a new Let's Encrypt certificate. Existing keys and traffic statistics are preserved; links are rebuilt for the new domain.
-
-### 4. 🔐 Secret and path rotation (4, 5)
-
-`base_path` is the secret URL path where the proxy responds, for example `https://example.com/a7f3k9...`. Generate a random path, set a custom path, rotate one key, rotate all secrets, or perform a full rotation. Old links stop working after the affected value changes.
-
-### 5. 🎨 Placeholder website (8)
-
-Press `8` to edit `/srv/tproxy-site/index.html` in `nano` or restore the default page. Replace it with a normal landing page so the domain looks like an ordinary website in a browser.
-
-### 6. ⚙️ Updates, tuning and monitoring (6, 7, 9, H, L, R)
-
-- **6 — Update tproxy-server:** fetch and rebuild the latest official relay while preserving profiles and settings.
-- **7 — Update the panel:** download the latest `tg-proxy` script from GitHub.
-- **9 — Limits and workers:** configure `MTPROXY_WORKERS`, `MTPROXY_MAX_CONNECTIONS` and static routing (`exact` / `legacy`).
-- **H — Resource monitor:** open `htop`.
-- **L — Diagnostics:** validate configuration, query MTProxy statistics and show recent logs.
-- **R — Restart services:** restart the proxy services and Caddy.
-
----
-
-## ⚡ Direct CLI commands
-
-```bash
-sudo proxy                         # Open the panel
-sudo proxy users                   # List keys, traffic and links
-sudo proxy add ivan websocket-lanes # Create a key
-sudo proxy add iphone ws
-sudo proxy mode ivan websocket-lanes # Change one key's transport
-sudo proxy mode all websocket-lanes  # Change all keys
-sudo proxy del ivan                # Delete a key
-sudo proxy domain new-proxy.example.com # Change domain and TLS
-sudo proxy site                    # Edit the placeholder website
-sudo proxy --rotate                # Rotate path and all secrets
-sudo proxy --update                # Update tproxy-server
-sudo proxy --self-update           # Update the panel
-sudo proxy --help                  # Show help
-```
-
----
-
-## 🛡 DPI camouflage and placeholder website
-
-The server should open in a browser as a normal live website. The installer creates `/srv/tproxy-site/index.html` and serves it through Caddy. Edit it with `sudo proxy site`, paste a single-page landing page, or upload a multi-page template over SFTP. Keep the main file named `index.html` and store assets under `/srv/tproxy-site/`.
-
----
-
-## 🔧 Systemd commands
-
-```bash
-sudo systemctl status tproxy-server mtproxy caddy
-sudo systemctl restart tproxy-server mtproxy caddy
-sudo journalctl -u tproxy-server -u mtproxy -n 50 --no-pager
-sudo journalctl -u caddy -n 50 --no-pager
-```
-
-You can also use the `R` and `L` actions in the panel.
+[MIT License](LICENSE) · Copyright © 2026 IohnMorris. Upstream components retain their own licenses.

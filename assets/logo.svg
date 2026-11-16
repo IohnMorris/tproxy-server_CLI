@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" role="img" aria-labelledby="title desc">
+<title id="title">TG-Proxy Control Panel</title><desc id="desc">A paper plane inside a shield alongside the TG-Proxy name</desc>
+<defs><linearGradient id="g" x1="0" x2="1" y2="1"><stop stop-color="#62d8fc"/><stop offset="1" stop-color="#4583f7"/></linearGradient></defs>
+<rect width="800" height="200" rx="26" fill="#101a2a"/>
+<path d="M99 24 157 47v49c0 35-22 58-58 76-36-18-58-41-58-76V47z" fill="#172f49" stroke="url(#g)" stroke-width="5"/>
+<path d="m62 94 70-31-18 67-17-21-13 12 2-19z" fill="url(#g)"/><path d="m86 102 32-25-21 32" fill="none" stroke="#101a2a" stroke-width="3" stroke-linecap="round"/>
+<text x="190" y="98" fill="#f3f8ff" font-family="Arial,sans-serif" font-weight="700" font-size="59">TG-PROXY</text>
+<text x="193" y="137" fill="#96adc7" font-family="Arial,sans-serif" font-size="23" letter-spacing="3">CONTROL PANEL</text>
+</svg>

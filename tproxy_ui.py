@@ -27,6 +27,7 @@ TRAFFIC_FILE = Path('/etc/tproxy-server/traffic_stats.json')
 VERSION_FILE = Path('/etc/tproxy-server/panel-version')
 TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
 CLI_BIN = '/usr/local/bin/tg-proxy'
+CORE_DIR = '/opt/tproxy-server'
 MODES = ('https', 'https-lanes', 'websocket', 'websocket-lanes')
 LANG = 'en' if os.environ.get('PROXY_LANG') == 'en' else 'ru'
 
@@ -48,6 +49,15 @@ def latest_tag():
     versions = [(version_tuple(item.get('name', '')), item.get('name', '')) for item in tags if isinstance(item, dict)]
     versions = [item for item in versions if item[0] is not None]
     return max(versions, default=(None, None))[1]
+
+
+def core_update():
+    env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
+    installed = subprocess.run(['git', '-C', CORE_DIR, 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=8, check=True, env=env).stdout.strip()
+    remote = subprocess.run(['git', '-C', CORE_DIR, 'ls-remote', 'origin', 'HEAD'], capture_output=True, text=True, timeout=12, check=True, env=env).stdout.split()
+    if not remote or not re.fullmatch(r'[0-9a-f]{40,64}', installed) or not re.fullmatch(r'[0-9a-f]{40,64}', remote[0]):
+        raise ValueError('Invalid Git revision')
+    return (installed, remote[0]) if installed != remote[0] else None
 
 
 def format_size(value):
@@ -382,27 +392,30 @@ class TProxyDashboard(App):
 
     @work
     async def check_updates(self):
+        tag_result, core_result = await asyncio.gather(asyncio.to_thread(latest_tag), asyncio.to_thread(core_update), return_exceptions=True)
         try:
-            tag = await asyncio.to_thread(latest_tag)
-            try:
-                current = VERSION_FILE.read_text(encoding='utf-8').strip()
-            except FileNotFoundError:
-                current = ''
-            current_version = version_tuple(current)
-            if not tag or (current_version is not None and version_tuple(tag) <= current_version):
-                return
-            message = tr(f'Доступна версия {tag}. ', f'Version {tag} is available. ')
-            message += tr(f'Установлена: {current}.', f'Installed: {current}.') if current_version else tr('Текущая версия не определена.', 'Current version is unknown.')
-            message += tr('\nПосле обновления панель перезапустится.', '\nThe panel will restart after updating.')
-            result = await self.push_screen_wait(Dialog(tr('Доступно обновление', 'Update available'), message=message, confirm=tr('Обновить', 'Update'), cancel=tr('Позже', 'Later')))
-            if result is not None:
-                if self.busy:
-                    self.notify(tr('Дождитесь завершения операции и обновите панель вручную', 'Wait for the operation to finish, then update the panel manually'), severity='warning')
-                else:
-                    self.run_command(tr('Обновление панели', 'Updating panel'), [CLI_BIN, '--self-update', tag])
-        except (OSError, ValueError, TypeError, AttributeError):
-            # Network failures must not prevent the panel from opening.
+            current = VERSION_FILE.read_text(encoding='utf-8').strip()
+        except OSError:
+            current = ''
+        current_version = version_tuple(current)
+        tag = tag_result if isinstance(tag_result, str) and version_tuple(tag_result) and (current_version is None or version_tuple(tag_result) > current_version) else None
+        core = core_result if isinstance(core_result, tuple) else None
+        if not tag and not core:
             return
+        lines = []
+        if tag:
+            lines.append(tr(f'Панель: {current or "неизвестная версия"} → {tag}', f'Panel: {current or "unknown version"} → {tag}'))
+        if core:
+            lines.append(tr(f'Ядро: {core[0][:8]} → {core[1][:8]}', f'Core: {core[0][:8]} → {core[1][:8]}'))
+        lines.append(tr('После обновления панель перезапустится.', 'The panel will restart after updating.'))
+        button = tr('Обновить всё', 'Update all') if tag and core else tr('Обновить', 'Update')
+        result = await self.push_screen_wait(Dialog(tr('Доступны обновления', 'Updates available'), message='\n'.join(lines), confirm=button, cancel=tr('Позже', 'Later')))
+        if result is not None:
+            if self.busy:
+                self.notify(tr('Дождитесь завершения операции и обновите вручную', 'Wait for the operation to finish, then update manually'), severity='warning')
+            else:
+                commands = ([[CLI_BIN, '--update']] if core else []) + ([[CLI_BIN, '--self-update', tag]] if tag else [])
+                self.run_command(tr('Обновление', 'Updating'), commands[0], additional_commands=commands[1:])
 
     def action_refresh_data(self) -> None:
         table = self.query_one(DataTable)
@@ -566,18 +579,27 @@ class TProxyDashboard(App):
                 self.notify(str(exc), severity='error')
 
     @work(exclusive=True)
-    async def run_command(self, title, command, input_text=''):
+    async def run_command(self, title, command, input_text='', additional_commands=()):
         self.busy = True
         self.action_refresh_data()
         try:
             env = dict(os.environ, PROXY_LANG=LANG, NO_COLOR='1')
-            process = await asyncio.create_subprocess_exec(*command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env)
-            output, _ = await process.communicate(input_text.encode())
-            text = ANSI.sub('', output.decode('utf-8', errors='replace')).strip()
-            text += tr(f'\n\nКод завершения: {process.returncode}', f'\n\nExit code: {process.returncode}')
+            text = ''
+            completed_update = False
+            for index, step in enumerate([command, *additional_commands]):
+                process = await asyncio.create_subprocess_exec(*step, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env)
+                output, _ = await process.communicate(input_text.encode() if index == 0 else b'')
+                text += ANSI.sub('', output.decode('utf-8', errors='replace')).strip()
+                text += tr(f'\n\nКод завершения: {process.returncode}\n\n', f'\n\nExit code: {process.returncode}\n\n')
+                if process.returncode != 0:
+                    break
+                if step[:2] in ([CLI_BIN, '--self-update'], [CLI_BIN, '--update']):
+                    completed_update = True
             if command[1:2] == ['domain'] and ('отменена' in text.lower() or 'cancelled' in text.lower()):
                 text += tr('\nПроверьте DNS: при несовпадении адресов операция отменяется.', '\nCheck DNS: the operation is cancelled if addresses do not match.')
-            if command[:2] in ([CLI_BIN, '--self-update'], [CLI_BIN, '--update']) and process.returncode == 0:
+            if completed_update and process.returncode != 0:
+                text += tr('\nПредыдущее обновление завершилось, следующее не удалось. Перезапустите панель и повторите обновление.', '\nAn earlier update completed, but the next one failed. Restart the panel and retry the update.')
+            if completed_update and process.returncode == 0:
                 self.notify(tr('Обновление завершено. Перезапуск панели…', 'Update complete. Restarting the panel…'))
                 await asyncio.sleep(1)
                 os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])

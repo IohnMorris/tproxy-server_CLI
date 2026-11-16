@@ -1553,7 +1553,7 @@ update_proxy() {
   old_commit=$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
   yellow "$(tr_text "Проверка обновлений telegramdesktop/tproxy-server..." "Checking telegramdesktop/tproxy-server for updates...")"
-  git -C "$INSTALL_DIR" fetch --depth=1 origin
+  git -C "$INSTALL_DIR" fetch --depth=1 origin HEAD
   git -C "$INSTALL_DIR" checkout -f FETCH_HEAD
 
   new_commit=$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
