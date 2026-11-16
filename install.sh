@@ -16,7 +16,9 @@ CLI_PATH="/usr/local/bin/tg-proxy"
 ALIAS_PATH="/usr/local/bin/proxy"
 NFT_TABLE="tg_proxy_stats"
 BASE_BACKEND_PORT=2398
-
+UI_RAW_URL="https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/tproxy_ui.py"
+UI_PATH="/usr/local/bin/tproxy_ui.py"
+VENV_PATH="/opt/tproxy-server/venv"
 # A single nft snapshot is reused while a screen is rendered.  Calling nft for
 # every profile made large installations noticeably slower without improving
 # the displayed counters.
@@ -360,6 +362,12 @@ self_update_script() {
   mv -f "$tmp_new" "$CLI_PATH"
   chmod +x "$CLI_PATH"
   ln -sf "$CLI_PATH" "$ALIAS_PATH" 2>/dev/null || true
+
+  if [[ -d "$VENV_PATH" ]]; then
+    yellow "$(tr_text "Обновление графического интерфейса..." "Updating Python UI...")"
+    curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$UI_PATH" 2>/dev/null
+    chmod +x "$UI_PATH"
+  fi
 
   green "$(tr_text "Скрипт панели успешно обновлен в $CLI_PATH (и $ALIAS_PATH)!" "Panel updated successfully at $CLI_PATH (and $ALIAS_PATH)!")"
   sleep 1
@@ -1604,8 +1612,7 @@ readyz_badge() {
 
 run_panel() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
-    # Графическое уведомление вместо обычного текста
-    whiptail --title "Внимание" --msgbox "Прокси еще не установлен. Запуск мастера установки..." 8 60
+    yellow "$(tr_text "Прокси еще не установлен. Запуск мастера установки..." "Proxy is not installed yet. Starting the installation wizard...")"
     install_proxy
     exit 0
   fi
@@ -1618,12 +1625,8 @@ run_panel() {
   fi
   install_cli_command
 
-  # Убеждаемся, что whiptail установлен, если вдруг его нет
-  if ! command -v whiptail >/dev/null 2>&1; then
-    apt-get update && apt-get install -y whiptail
-  fi
-
   while true; do
+    clear 2>/dev/null || true
     local host base_path prof_count git_ver sys_line total_all=0 active_conns_all=0 active_users_all=0
     host="$(get_hostname)"
     base_path="$(get_base_path)"
@@ -1631,9 +1634,8 @@ run_panel() {
     prof_count=${#PROFILE_ROWS[@]}
     git_ver=$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo "n/a")
     sys_line="$(get_system_metrics_line)"
-
-    # Блок сбора статистики оставляем без изменений
     begin_metrics_snapshot
+
     for (( i=0; i<prof_count; i++ )); do
       local n b p rx tx tot c dt u_est row_secret row_mode
       IFS=$'\x1f' read -r n row_secret row_mode b <<< "${PROFILE_ROWS[$i]}"
@@ -1648,73 +1650,94 @@ run_panel() {
 
     local online_summary="0"
     if (( active_conns_all > 0 )); then
-      online_summary="~${active_users_all} чел. (${active_conns_all} пот.)"
+      online_summary="$(tr_text "~${active_users_all} чел. (${active_conns_all} пот.)" "~${active_users_all} users (${active_conns_all} streams)")"
     fi
 
-    # Собираем данные в красивую шапку для TUI-окна
-    local info_text="Домен: ${host:-не найден}\nПуть: ${base_path:+/$base_path}${base_path:-/ (корень)}\nКлючей: $prof_count | Онлайн: $online_summary | Трафик: $(format_bytes "$total_all")\nСервер: $sys_line"
+    header_box "$(tr_text "TG-PROXY — ПАНЕЛЬ УПРАВЛЕНИЯ (вызов: sudo proxy / sudo tg-proxy)" "TG-PROXY — CONTROL PANEL (sudo proxy / sudo tg-proxy)")"
+    printf "$(tr_text "  Домен:    \033[1m%s\033[0m\n" "  Domain:    \033[1m%s\033[0m\n")" "${host:-$(tr_text "не найден" "not found")}"
+    printf "$(tr_text "  Путь:     \033[33m%s\033[0m\n" "  Path:     \033[33m%s\033[0m\n")" "${base_path:+/$base_path}${base_path:-$(tr_text "/ (корень)" "/ (root)")}"
+    printf "$(tr_text "  Заглушка: \033[36m%s\033[0m\n" "  Website: \033[36m%s\033[0m\n")" "$SITE_INDEX"
+    printf "$(tr_text "  Ключей:   \033[1m%s\033[0m   |   Онлайн: \033[1;32m%s\033[0m   |   Трафик: \033[1;33m%s\033[0m   |   Релей: %s\n" "  Keys:   \033[1m%s\033[0m   |   Online: \033[1;32m%s\033[0m   |   Traffic: \033[1;33m%s\033[0m   |   Relay: %s\n")" \
+      "$prof_count" "$online_summary" "$(format_bytes "$total_all")" "$git_ver"
+    hr
+    printf "$(tr_text "  Сервер:   %s\n" "  Server:   %s\n")" "$sys_line"
+    printf "$(tr_text "  Службы:   tproxy: %s   mtproxy: %s   caddy: %s   readyz: %s\n" "  Services:   tproxy: %s   mtproxy: %s   caddy: %s   readyz: %s\n")" \
+      "$(service_badge tproxy-server)" "$(service_badge mtproxy)" "$(service_badge caddy)" "$(readyz_badge)"
+    hr
+    printf "\n"
+    bold "$(tr_text "  КЛЮЧИ, ТРАНСПОРТ И ТРАФИК" "  KEYS, TRANSPORT AND TRAFFIC")"
+    printf "$(tr_text "   \033[1;36m1)\033[0m Таблица ключей, трафик и ссылки\n" "   \033[1;36m1)\033[0m Key table, traffic and links\n")"
+    printf "$(tr_text "   \033[1;32m2)\033[0m Создать ключ (https / websocket / lanes)\n" "   \033[1;32m2)\033[0m Create key (https / websocket / lanes)\n")"
+    printf "$(tr_text "   \033[1;35mM)\033[0m Сменить транспорт существующему ключу (или всем сразу)\n" "   \033[1;35mM)\033[0m Change transport for one or all keys\n")"
+    printf "$(tr_text "   \033[1;31m3)\033[0m Удалить ключ\n\n" "   \033[1;31m3)\033[0m Delete key\n\n")"
 
-    # Отрисовка графического окна
-    # 3>&1 1>&2 2>&3 - магия перенаправления дескрипторов, чтобы bash мог считать выбранный пункт
-    local choice
-    choice=$(whiptail --title "TG-PROXY — ПАНЕЛЬ УПРАВЛЕНИЯ" \
-      --cancel-button "Выход" \
-      --menu "$info_text\n\nВыберите действие:" 24 95 14 \
-      "1" "Таблица ключей, трафик и ссылки" \
-      "2" "Создать ключ (https/ws/lanes)" \
-      "M" "Сменить транспорт" \
-      "3" "Удалить ключ" \
-      "4" "Секреты и base_path" \
-      "5" "Полная ротация (путь + секреты)" \
-      "D" "Сменить домен прокси (SSL)" \
-      "6" "Обновить ядро tproxy-server" \
-      "7" "Обновить панель tg-proxy" \
-      "8" "Сайт-заглушка (nano)" \
-      "9" "Лимиты и воркеры MTProxy" \
-      "H" "Интерактивный монитор (htop)" \
-      "L" "Диагностика и логи" \
-      "R" "Перезапустить сервисы" 3>&1 1>&2 2>&3)
+    bold "$(tr_text "  ДОМЕН, СЕКРЕТЫ И САЙТ" "  DOMAIN, SECRETS AND WEBSITE")"
+    printf "$(tr_text "   \033[1;36m4)\033[0m Настройка секретов и base_path\n" "   \033[1;36m4)\033[0m Configure secrets and base_path\n")"
+    printf "$(tr_text "   \033[1;33m5)\033[0m Полная ротация (новый путь + все секреты) \033[90m[с защитой]\033[0m\n" "   \033[1;33m5)\033[0m Full rotation (new path + all secrets) \033[90m[confirmation required]\033[0m\n")"
+    printf "$(tr_text "   \033[1;35m8)\033[0m Сайт-заглушка (nano)\n" "   \033[1;35m8)\033[0m Placeholder website (nano)\n")"
+    printf "$(tr_text "   \033[1;36mD)\033[0m Сменить домен прокси (выпуск SSL в Caddy)\n\n" "   \033[1;36mD)\033[0m Change proxy domain (Caddy SSL)\n\n")"
 
-    local exitstatus=$?
-    if [ $exitstatus != 0 ]; then
-      save_nft_traffic_to_db 2>/dev/null || true
-      clear
-      printf "\nПанель доступна по команде: \033[1;32msudo proxy\033[0m или \033[1;32msudo tg-proxy\033[0m\n\n"
-      exit 0
-    fi
+    bold "$(tr_text "  СЕРВЕР И МОНИТОРИНГ" "  SERVER AND MONITORING")"
+    printf "$(tr_text "   \033[1;36m6)\033[0m Обновить ядро tproxy-server\n" "   \033[1;36m6)\033[0m Update tproxy-server\n")"
+    printf "$(tr_text "   \033[1;32m7)\033[0m Обновить панель tg-proxy\n" "   \033[1;32m7)\033[0m Update tg-proxy panel\n")"
+    printf "$(tr_text "   \033[1;36m9)\033[0m Лимиты и воркеры MTProxy\n" "   \033[1;36m9)\033[0m MTProxy limits and workers\n")"
+    printf "$(tr_text "   \033[1;33mH)\033[0m Открыть интерактивный монитор (htop)\n" "   \033[1;33mH)\033[0m Open resource monitor (htop)\n")"
+    printf "$(tr_text "   \033[1;36mL)\033[0m Диагностика и логи             \033[1;36mR)\033[0m Перезапустить сервисы\n" "   \033[1;36mL)\033[0m Diagnostics and logs             \033[1;36mR)\033[0m Restart services\n")"
+    printf "$(tr_text "   \033[1;90m0)\033[0m Выход\n\n" "   \033[1;90m0)\033[0m Exit\n\n")"
 
-    # Выполняем твои оригинальные функции на основе выбора в графическом меню
-    case "${choice}" in
+    local choice=""
+    ask "$(tr_text "Пункт меню [0-9 / M / D / H / L / R]: " "Menu item [0-9 / M / D / H / L / R]: ")" choice
+    case "${choice,,}" in
       1) users_manager_menu ;;
       2) quick_create_user || true; pause_menu ;;
-      M|m) quick_change_mode || true; pause_menu ;;
-      3) print_proxy_info; quick_delete_user || true; pause_menu ;;
+      m|mode) quick_change_mode || true; pause_menu ;;
+      3)
+        print_proxy_info
+        quick_delete_user || true
+        pause_menu
+        ;;
       4) secrets_and_rotation_menu ;;
       5) rotate_proxy "all"; pause_menu ;;
-      D|d) change_domain || true; pause_menu ;;
       6) update_proxy; pause_menu ;;
       7) self_update_script || pause_menu ;;
       8) edit_site_stub ;;
       9) tune_limits_and_routes || true; pause_menu ;;
-      H|h) open_htop_monitor ;;
-      L|l)
-        clear
-        cyan "--- Проверка конфига (tproxy-server -check) ---"
-        /usr/local/bin/tproxy-server -config "$CONFIG_FILE" -profiles-file "$PROFILES_FILE" -check || true
+      d|domain)
+        change_domain || true
+        pause_menu
+        ;;
+      h|htop|top)
+        open_htop_monitor
+        ;;
+      l)
         printf '\n'
-        cyan "--- Статистика MTProxy (127.0.0.1:8888/stats) ---"
+        cyan "$(tr_text "--- Проверка конфига (tproxy-server -check) ---" "--- Configuration check (tproxy-server -check) ---")"
+        if /usr/local/bin/tproxy-server -config "$CONFIG_FILE" -profiles-file "$PROFILES_FILE" -check; then
+          green "$(tr_text "Конфигурация валидна." "Configuration is valid.")"
+        fi
+        printf '\n'
+        cyan "$(tr_text "--- Статистика MTProxy (127.0.0.1:8888/stats) ---" "--- MTProxy statistics (127.0.0.1:8888/stats) ---")"
         fetch_mtproxy_stats
         printf '\n'
-        cyan "--- Логи (последние 20 строк) ---"
+        cyan "$(tr_text "--- Логи (последние 20 строк) ---" "--- Logs (last 20 lines) ---")"
         journalctl -u tproxy-server -u mtproxy --no-pager -n 20
         pause_menu
         ;;
-      R|r)
-        yellow "Перезапуск сервисов..."
+      r)
+        yellow "$(tr_text "Перезапуск сервисов..." "Restarting services...")"
         sync_and_restart_services
         systemctl restart caddy 2>/dev/null || true
-        green "Все сервисы перезапущены!"
+        green "$(tr_text "Все сервисы перезапущены!" "All services restarted!")"
         pause_menu
+        ;;
+      0|q|exit)
+        save_nft_traffic_to_db 2>/dev/null || true
+        printf "$(tr_text "\nПанель доступна по команде: \033[1;32msudo proxy\033[0m или \033[1;32msudo tg-proxy\033[0m\n\n" "\nOpen the panel with: \033[1;32msudo proxy\033[0m or \033[1;32msudo tg-proxy\033[0m\n\n")"
+        exit 0
+        ;;
+      *)
+        red "$(tr_text "Неверный выбор." "Invalid choice.")"
+        sleep 1
         ;;
     esac
   done
@@ -1856,6 +1879,36 @@ HELP
 # Гарантируем установку глобальной команды при любом вызове
 install_cli_command 2>/dev/null || true
 
+launch_ui() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    yellow "$(tr_text "Прокси еще не установлен. Запуск мастера установки..." "Proxy is not installed yet. Starting the installation wizard...")"
+    install_proxy
+    exit 0
+  fi
+
+  # Если виртуального окружения нет - создаем его и качаем библиотеку (защита от ошибок в новых Linux)
+  if [[ ! -f "$UI_PATH" ]] || [[ ! -d "$VENV_PATH" ]]; then
+    clear
+    cyan "Первый запуск нового интерфейса. Установка компонентов (Textual), подождите 10-20 секунд..."
+    apt-get update >/dev/null 2>&1
+    apt-get install -y python3-pip python3-venv >/dev/null 2>&1
+    
+    python3 -m venv "$VENV_PATH"
+    "$VENV_PATH/bin/pip" install textual >/dev/null 2>&1
+    
+    curl -fsSL "${UI_RAW_URL}?t=$(date +%s)" -o "$UI_PATH" 2>/dev/null
+    chmod +x "$UI_PATH"
+  fi
+
+  # Запускаем новый интерфейс через виртуальное окружение
+  if [[ -f "$UI_PATH" ]]; then
+    exec "$VENV_PATH/bin/python3" "$UI_PATH"
+  else
+    red "Не удалось скачать tproxy_ui.py. Запуск резервной старой панели..."
+    run_panel
+  fi
+}
+
 case "${1:-}" in
   --install)
     install_proxy
@@ -1898,7 +1951,7 @@ case "${1:-}" in
     ;;
   "")
     if [[ -f "$CONFIG_FILE" ]]; then
-      run_panel
+      launch_ui
     else
       install_proxy
     fi
