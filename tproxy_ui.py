@@ -22,6 +22,7 @@ from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Sel
 PROFILES_FILE = Path('/etc/tproxy-server/profiles.json')
 CONFIG_FILE = Path('/etc/tproxy-server/config.json')
 SITE_FILE = Path('/srv/tproxy-site/index.html')
+MTPROXY_ENV = Path('/etc/mtproxy/mtproxy.env')
 TRAFFIC_FILE = Path('/etc/tproxy-server/traffic_stats.json')
 VERSION_FILE = Path('/etc/tproxy-server/panel-version')
 TAGS_URL = 'https://api.github.com/repos/IohnMorris/tproxy-server_CLI/tags?per_page=100'
@@ -157,6 +158,28 @@ def make_link(profile, config):
     return 'https://t.me/webproxy?server=' + quote(server, safe='') + '&secret=' + secret
 
 
+def profile_statistics(profile):
+    name = profile.get('name', '')
+    try:
+        saved = json.loads(TRAFFIC_FILE.read_text(encoding='utf-8')).get(name, {})
+        rx, tx = int(saved.get('rx', 0)), int(saved.get('tx', 0))
+        result = subprocess.run(['nft', '-j', 'list', 'table', 'inet', 'tg_proxy_stats'], capture_output=True, text=True, timeout=4, check=True)
+        for item in json.loads(result.stdout).get('nftables', []):
+            rule = item.get('rule', {})
+            amount = sum(int(expr['counter'].get('bytes', 0)) for expr in rule.get('expr', []) if 'counter' in expr)
+            if rule.get('comment') == 'rx_' + name: rx += amount
+            if rule.get('comment') == 'tx_' + name: tx += amount
+        port = str(profile.get('backend', '')).rsplit(':', 1)[-1]
+        if not port.isdigit(): raise ValueError('Invalid backend port')
+        result = subprocess.run(['ss', '-Htan', 'state', 'established', f'( dport = :{port} )'], capture_output=True, text=True, timeout=4, check=True)
+        connections = len(result.stdout.splitlines())
+        created = saved.get('created_at', '—')
+        return tr(f'Создан: {created} • Онлайн: ~{(connections + 5) // 6} ({connections} соед.)\nRX: {format_size(rx)} • TX: {format_size(tx)} • Всего: {format_size(rx + tx)}',
+                  f'Created: {created} • Online: ~{(connections + 5) // 6} ({connections} connections)\nRX: {format_size(rx)} • TX: {format_size(tx)} • Total: {format_size(rx + tx)}')
+    except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
+        return tr('Статистика недоступна', 'Statistics unavailable')
+
+
 class Dialog(ModalScreen):
     CSS = '''
     Dialog { align: center middle; background: $background 70%; }
@@ -241,9 +264,9 @@ class ProfileDialog(ModalScreen):
     #profile-buttons Button { margin-right: 1; }
     '''
 
-    def __init__(self, profile, link, error=''):
+    def __init__(self, profile, link, error='', statistics=''):
         super().__init__()
-        self.profile, self.link, self.error = profile, link, error
+        self.profile, self.link, self.error, self.statistics = profile, link, error, statistics
 
     def compose(self) -> ComposeResult:
         with Vertical(id='profile-card'):
@@ -251,6 +274,7 @@ class ProfileDialog(ModalScreen):
             with VerticalScroll(id='profile-content'):
                 yield Static(tr('Транспорт: ', 'Transport: ') + str(self.profile.get('carrier_mode', 'https')), markup=False)
                 yield Static('Backend: ' + str(self.profile.get('backend', '')), markup=False)
+                yield Static(self.statistics, markup=False)
                 yield Label(tr('Ссылка для подключения', 'Connection link'))
                 if self.link:
                     yield Input(value=self.link, id='profile-link')
@@ -298,6 +322,12 @@ class TProxyDashboard(App):
         self.busy = False
         self.metrics_busy = False
 
+    def get_system_commands(self, screen):
+        # The command palette should expose the theme selector only.
+        for command in super().get_system_commands(screen):
+            if 'theme' in command.title.lower():
+                yield command
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static(tr('Загрузка...', 'Loading...'), id='status')
@@ -311,16 +341,26 @@ class TProxyDashboard(App):
                 yield Button(tr('Открыть профиль и ссылку', 'Open profile and link'), id='link', variant='primary')
                 yield Button(tr('Изменить транспорт', 'Change transport'), id='mode', variant='default')
                 yield Button(tr('Удалить ключ', 'Delete key'), id='delete', variant='error')
+                yield Button(tr('Перевыпустить секрет ключа', 'Rotate key secret'), id='rotate-user', variant='error')
+                yield Button(tr('Сбросить трафик ключа', 'Reset key traffic'), id='reset-traffic', variant='warning')
                 yield Label(tr('КЛЮЧИ И ССЫЛКИ', 'KEYS AND LINKS'), classes='section-title')
                 yield Button(tr('Добавить ключ', 'Add key'), id='add', variant='success')
                 yield Button(tr('Показать все ссылки', 'Show all links'), id='links', variant='primary')
+                yield Button(tr('Транспорт для всех ключей', 'Transport for all keys'), id='mode-all')
                 yield Label(tr('ДОМЕН И САЙТ', 'DOMAIN AND WEBSITE'), classes='section-title')
                 yield Button(tr('Сменить домен', 'Change domain'), id='domain', variant='default')
                 yield Button(tr('Редактировать сайт', 'Edit website'), id='site', variant='default')
+                yield Button(tr('Восстановить стандартный сайт', 'Restore default website'), id='restore-site', variant='warning')
+                yield Label(tr('СЕКРЕТЫ И ПУТЬ', 'SECRETS AND PATH'), classes='section-title')
+                yield Button(tr('Перевыпустить все секреты', 'Rotate all key secrets'), id='rotate-secrets', variant='error')
+                yield Button(tr('Случайный путь', 'Generate random path'), id='rotate-path', variant='warning')
+                yield Button(tr('Задать путь', 'Set custom path'), id='set-path', variant='warning')
                 yield Label(tr('СЕРВИС И ОБСЛУЖИВАНИЕ', 'SERVICE AND MAINTENANCE'), classes='section-title')
                 yield Button(tr('Состояние и логи', 'Status and logs'), id='diagnostics', variant='default')
                 yield Button(tr('Перезапустить службы', 'Restart services'), id='restart', variant='warning')
-                yield Button(tr('Полная ротация секретов', 'Rotate all secrets'), id='rotate', variant='error')
+                yield Button(tr('Лимиты и маршруты', 'Limits and routes'), id='limits')
+                yield Button(tr('Монитор процессов', 'Process monitor'), id='monitor')
+                yield Button(tr('Полная ротация: путь и секреты', 'Full rotation: path and secrets'), id='rotate', variant='error')
                 yield Label(tr('ОБНОВЛЕНИЯ', 'UPDATES'), classes='section-title')
                 yield Button(tr('Обновить ядро', 'Update core'), id='update')
                 yield Button(tr('Обновить панель и перезапустить UI', 'Update panel and restart UI'), id='self-update', variant='success')
@@ -408,14 +448,16 @@ class TProxyDashboard(App):
             return
         self.open_profile(self.profiles[row])
 
-    def open_profile(self, profile):
+    @work
+    async def open_profile(self, profile):
         try:
             config = json.loads(CONFIG_FILE.read_text(encoding='utf-8'))
             link = make_link(profile, config)
             error = ''
         except (OSError, ValueError, KeyError, TypeError) as exc:
             link, error = '', str(exc)
-        self.push_screen(ProfileDialog(profile, link, error))
+        statistics = await asyncio.to_thread(profile_statistics, dict(profile))
+        self.push_screen(ProfileDialog(profile, link, error, statistics))
 
     @work
     async def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -445,17 +487,50 @@ class TProxyDashboard(App):
                 if not re.fullmatch(r'[A-Za-z0-9_-]+', values['name']):
                     self.notify(tr('Введите корректное имя', 'Enter a valid name'), severity='error'); return
                 self.run_command(tr('Создание ключа', 'Creating key'), [CLI_BIN, 'add', values['name'], values['mode']])
-        elif key in ('delete', 'mode'):
+        elif key in ('delete', 'mode', 'rotate-user', 'reset-traffic'):
             profile = self.selected()
             if not profile: return
             name = profile['name']
             if key == 'delete':
                 values = await self.push_screen_wait(Dialog(tr('Удалить ключ?', 'Delete key?'), message=tr(f'Ключ {name} будет удалён, его ссылка перестанет работать.', f'Key {name} will be deleted and its link will stop working.'), confirm=tr('Удалить', 'Delete')))
                 if values is not None: self.run_command(tr('Удаление ключа', 'Deleting key'), [CLI_BIN, 'del', name], 'yes\n')
-            else:
+            elif key == 'mode':
                 current = profile.get('carrier_mode', 'https')
                 values = await self.push_screen_wait(Dialog(tr('Транспорт: ', 'Transport: ') + name, [('mode', tr('Режим', 'Mode'), current if current in MODES else 'https', MODES)]))
                 if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', name, values['mode']])
+            else:
+                rotate = key == 'rotate-user'
+                message = tr('Старая ссылка перестанет работать.', 'The old link will stop working.') if rotate else tr('Статистика трафика будет сброшена.', 'Traffic statistics will be reset.')
+                values = await self.push_screen_wait(Dialog(name, message=message, confirm=tr('Продолжить', 'Continue')))
+                if values is not None:
+                    self.run_command(tr('Обновление ключа', 'Updating key'), [CLI_BIN, 'ui-rotate-user' if rotate else 'ui-reset-traffic', name], 'yes\n' if rotate else '')
+        elif key == 'mode-all':
+            values = await self.push_screen_wait(Dialog(tr('Транспорт для всех ключей', 'Transport for all keys'), [('mode', tr('Режим', 'Mode'), 'https', MODES)]))
+            if values is not None: self.run_command(tr('Изменение транспорта', 'Changing transport'), [CLI_BIN, 'mode', 'all', values['mode']])
+        elif key in ('rotate-secrets', 'rotate-path', 'set-path'):
+            fields = [('path', tr('Новый путь без слешей (пусто — корень)', 'New path without slashes (empty for root)'), '', None)] if key == 'set-path' else []
+            values = await self.push_screen_wait(Dialog(tr('Изменение секретов и пути', 'Change secrets and path'), fields, tr('Старые ссылки перестанут работать.', 'Old links will stop working.'), tr('Продолжить', 'Continue')))
+            if values is not None:
+                path = values.get('path', '')
+                if key == 'set-path' and not re.fullmatch(r'[A-Za-z0-9_-]*', path):
+                    self.notify(tr('Путь должен содержать только латинские буквы, цифры, _ и -', 'Path must contain only Latin letters, digits, _ and -'), severity='error')
+                    return
+                cmd = {'rotate-secrets': 'ui-rotate-secrets', 'rotate-path': 'ui-rotate-path', 'set-path': 'ui-set-path'}[key]
+                self.run_command(tr('Изменение секретов и пути', 'Change secrets and path'), [CLI_BIN, cmd] + ([path] if key == 'set-path' else []), 'yes\n')
+        elif key == 'limits':
+            try:
+                config = json.loads(CONFIG_FILE.read_text(encoding='utf-8'))
+                env_text = MTPROXY_ENV.read_text(encoding='utf-8')
+                env_values = dict(line.split('=', 1) for line in env_text.splitlines() if '=' in line and not line.lstrip().startswith('#'))
+                workers, conns = env_values.get('MTPROXY_WORKERS', '1'), env_values.get('MTPROXY_MAX_CONNECTIONS', '4096')
+                routes = config.get('static_routes', 'exact')
+                values = await self.push_screen_wait(Dialog(tr('Лимиты и маршруты', 'Limits and routes'), [('workers', tr('Воркеры MTProxy', 'MTProxy workers'), workers, None), ('conns', tr('Макс. соединений', 'Max connections'), conns, None), ('routes', tr('Маршрутизация статики', 'Static routing'), routes if routes in ('exact', 'legacy') else 'exact', ('exact', 'legacy'))]))
+                if values is not None:
+                    if not all(re.fullmatch(r'[1-9][0-9]*', values[field]) for field in ('workers', 'conns')):
+                        self.notify(tr('Введите положительные целые числа', 'Enter positive integers'), severity='error'); return
+                    self.run_command(tr('Лимиты и маршруты', 'Limits and routes'), [CLI_BIN, 'ui-limits', values['workers'], values['conns'], values['routes']])
+            except (OSError, ValueError, TypeError) as exc:
+                self.notify(str(exc), severity='error')
         elif key == 'domain':
             values = await self.push_screen_wait(Dialog(tr('Смена домена', 'Change domain'), [('host', tr('Новый домен', 'New domain'), '', None), ('email', tr('Email для сертификата (необязательно)', 'Certificate email (optional)'), '', None)], tr('Ссылки изменятся. Проверьте DNS и доступность портов 80 и 443.', 'Links will change. Check DNS and access to ports 80 and 443.'), tr('Продолжить', 'Continue')))
             if values is not None and values['host'].strip():
@@ -467,7 +542,13 @@ class TProxyDashboard(App):
                 if key == 'restart': self.run_command(tr('Перезапуск служб', 'Restarting services'), ['systemctl', 'restart', 'tproxy-server', 'mtproxy', 'caddy'])
                 else: self.run_command(event.button.label.plain, [CLI_BIN, {'rotate': '--rotate', 'update': '--update', 'self-update': '--self-update'}[key]], 'yes\n' if key == 'rotate' else '')
         elif key == 'diagnostics':
-            self.run_command(tr('Состояние и логи', 'Status and logs'), ['journalctl', '-u', 'tproxy-server', '-u', 'mtproxy', '-u', 'caddy', '--no-pager', '-n', '100'])
+            self.run_command(tr('Состояние и логи', 'Status and logs'), [CLI_BIN, 'ui-diagnostics'])
+        elif key == 'monitor':
+            self.run_command(tr('Монитор процессов', 'Process monitor'), ['top', '-b', '-n', '1'])
+        elif key == 'restore-site':
+            values = await self.push_screen_wait(Dialog(tr('Восстановить сайт?', 'Restore website?'), message=tr('Текущий HTML будет заменён стандартной заглушкой.', 'The current HTML will be replaced with the default placeholder.'), confirm=tr('Восстановить', 'Restore')))
+            if values is not None:
+                self.run_command(tr('Восстановление сайта', 'Restoring website'), [CLI_BIN, 'ui-restore-site'], 'yes\n')
         elif key == 'site':
             try:
                 content = SITE_FILE.read_text(encoding='utf-8')
@@ -490,8 +571,8 @@ class TProxyDashboard(App):
             text += tr(f'\n\nКод завершения: {process.returncode}', f'\n\nExit code: {process.returncode}')
             if command[1:2] == ['domain'] and ('отменена' in text.lower() or 'cancelled' in text.lower()):
                 text += tr('\nПроверьте DNS: при несовпадении адресов операция отменяется.', '\nCheck DNS: the operation is cancelled if addresses do not match.')
-            if command[:2] == [CLI_BIN, '--self-update'] and process.returncode == 0:
-                self.notify(tr('Панель обновлена. Перезапуск интерфейса…', 'Panel updated. Restarting the interface…'))
+            if command[:2] in ([CLI_BIN, '--self-update'], [CLI_BIN, '--update']) and process.returncode == 0:
+                self.notify(tr('Обновление завершено. Перезапуск панели…', 'Update complete. Restarting the panel…'))
                 await asyncio.sleep(1)
                 os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
             self.push_screen(TextDialog(title, text or tr('Готово', 'Done'), copy=True))

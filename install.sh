@@ -893,7 +893,7 @@ PY
 
 reset_user_traffic() {
   local target_name="$1"
-  save_nft_traffic_to_db
+  setup_nft_counters
   if [[ -f "$TRAFFIC_DB" ]]; then
     local tmp_db
     tmp_db="$(mktemp)"
@@ -901,7 +901,6 @@ reset_user_traffic() {
     write_file_atomically "$tmp_db" "$TRAFFIC_DB"
     rm -f "$tmp_db"
   fi
-  setup_nft_counters
 }
 
 # Чтение сырой статистики MTProxy с 127.0.0.1:8888
@@ -1899,6 +1898,13 @@ launch_ui() {
     exit 0
   fi
 
+  ensure_profiles_structure
+  if ! systemctl is-active --quiet tproxy-server 2>/dev/null; then
+    sync_and_restart_services
+  elif ! nft list table inet "$NFT_TABLE" >/dev/null 2>&1; then
+    setup_nft_counters 2>/dev/null || true
+  fi
+
   if [[ ! -x "$VENV_PATH/bin/python3" ]] || ! "$VENV_PATH/bin/python3" -c 'import textual' >/dev/null 2>&1; then
     cyan "$(tr_text "Установка компонентов интерфейса..." "Installing interface dependencies...")"
     if ! (apt-get update && apt-get install -y python3-venv &&
@@ -1927,6 +1933,61 @@ launch_ui() {
 }
 
 case "${1:-}" in
+  ui-rotate-user|ui-reset-traffic)
+    ensure_profiles_structure
+    ui_name="${2:-}"
+    ui_idx="$(jq -r --arg n "$ui_name" '.profiles | map(.name == $n) | index(true) // empty' "$PROFILES_FILE")"
+    [[ -n "$ui_idx" ]] || die "$(tr_text "Ключ не найден: $ui_name" "Key not found: $ui_name")"
+    if [[ "$1" == ui-rotate-user ]]; then
+      rotate_single_user_secret "$ui_idx"
+    else
+      reset_user_traffic "$ui_name"
+      green "$(tr_text "Трафик сброшен: $ui_name" "Traffic reset: $ui_name")"
+    fi
+    ;;
+  ui-rotate-secrets|ui-rotate-path)
+    if [[ "$1" == ui-rotate-secrets ]]; then rotate_proxy secrets; else rotate_proxy path; fi
+    ;;
+  ui-set-path)
+    ui_path="${2:-}"
+    [[ "$ui_path" =~ ^[a-zA-Z0-9_-]*$ ]] || die "$(tr_text "Недопустимый путь." "Invalid path.")"
+    if confirm_danger "$(tr_text "Путь изменится; старые ссылки перестанут работать." "The path will change; old links will stop working.")"; then
+      ui_tmp="$(mktemp)"
+      jq --arg bp "$ui_path" '.base_path = $bp' "$CONFIG_FILE" > "$ui_tmp"
+      write_file_atomically "$ui_tmp" "$CONFIG_FILE"
+      rm -f "$ui_tmp"
+      sync_and_restart_services
+      print_proxy_info
+    fi
+    ;;
+  ui-limits)
+    ui_workers="${2:-}" ui_conns="${3:-}" ui_routes="${4:-}"
+    [[ "$ui_workers" =~ ^[1-9][0-9]*$ && "$ui_conns" =~ ^[1-9][0-9]*$ && ( "$ui_routes" == exact || "$ui_routes" == legacy ) ]] || die "$(tr_text "Некорректные настройки." "Invalid settings.")"
+    printf '%s\n%s\n%s\n' "$ui_workers" "$ui_conns" "$ui_routes" | tune_limits_and_routes
+    ;;
+  ui-diagnostics)
+    printf '%s\n' "$(tr_text 'Проверка конфигурации:' 'Configuration check:')"
+    /usr/local/bin/tproxy-server -config "$CONFIG_FILE" -profiles-file "$PROFILES_FILE" -check || true
+    printf '\n%s\n' "$(tr_text 'Статистика MTProxy:' 'MTProxy statistics:')"
+    fetch_mtproxy_stats
+    printf '\n%s\n' "$(tr_text 'Последние журналы:' 'Recent logs:')"
+    journalctl -u tproxy-server -u mtproxy -u caddy --no-pager -n 100 || true
+    ;;
+  ui-restore-site)
+    if confirm_danger "$(tr_text 'Текущий сайт будет заменён стандартной заглушкой.' 'The current site will be replaced with the default placeholder.')"; then
+      ui_host="$(get_hostname)"
+      mkdir -p "$SITE_DIR"
+      cat > "$SITE_INDEX" <<HTML
+<!doctype html>
+<html lang="${PROXY_LANG}">
+<head><meta charset="utf-8"><title>${ui_host}</title></head>
+<body><h1>$(tr_text 'Сайт находится в разработке.' 'This site is under construction.')</h1></body>
+</html>
+HTML
+      chmod 755 "$SITE_INDEX"
+      green "$(tr_text 'Стандартная заглушка восстановлена.' 'Default placeholder restored.')"
+    fi
+    ;;
   --install)
     install_proxy
     ;;
