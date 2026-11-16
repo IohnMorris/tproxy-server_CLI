@@ -13,6 +13,24 @@
 
 TG-Proxy устанавливает и помогает управлять [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy и Caddy на сервере Linux. Панель работает в терминале по SSH, поддерживает русский и английский языки и позволяет выполнять основные действия в окнах интерфейса.
 
+### Требования и установка
+
+Нужен сервер Ubuntu 22.04+ или Debian 12+ (`x86_64`), доступ `root` или `sudo`, домен с A-записью на IP сервера и свободные порты 80 и 443.
+
+```bash
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
+```
+
+Мастер запросит язык, домен, email сертификата и транспорт. После установки запустите панель:
+
+```bash
+sudo proxy
+```
+
+В верхней части показана сводка, слева — профили, справа — действия. Раздел выбранного ключа открыт при запуске; остальные разделы можно раскрывать по мере необходимости. `F5` обновляет данные, `Q` закрывает панель. Доступна смена темы через командную палитру (`Ctrl+P`).
+
+Копирование ссылки использует возможности SSH-терминала: поддержка буфера обмена зависит от клиента и его настроек. Если копирование недоступно, выделите ссылку мышью и скопируйте средствами терминала.
+
 ![Панель TG-Proxy на русском языке](assets/panel-ru.png)
 
 ### Возможности
@@ -46,24 +64,6 @@ TG-Proxy устанавливает и помогает управлять [Tele
 - **Максимум соединений (Max Connections)** — лимит, передаваемый MTProxy для каждого воркера. Увеличение лимита само по себе не ускоряет прокси: фактическая ёмкость зависит от CPU, памяти и сети. Начальное значение — `4096`.
 - **Маршрутизация статики (Static Routing)** — режим обработки путей статического сайта: `exact` использует точное сопоставление, `legacy` сохраняет совместимость со старой логикой. Используйте `exact`, если обратная совместимость не требуется.
 
-### Требования и установка
-
-Нужен сервер Ubuntu 22.04+ или Debian 12+ (`x86_64`), доступ `root` или `sudo`, домен с A-записью на IP сервера и свободные порты 80 и 443.
-
-```bash
-sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
-```
-
-Мастер запросит язык, домен, email сертификата и транспорт. После установки запустите панель:
-
-```bash
-sudo proxy
-```
-
-В верхней части показана сводка, слева — профили, справа — действия. Раздел выбранного ключа открыт при запуске; остальные разделы можно раскрывать по мере необходимости. `F5` обновляет данные, `Q` закрывает панель. Доступна смена темы через командную палитру (`Ctrl+P`).
-
-Копирование ссылки использует возможности SSH-терминала: поддержка буфера обмена зависит от клиента и его настроек. Если копирование недоступно, выделите ссылку мышью и скопируйте средствами терминала.
-
 ### Команды
 
 ```bash
@@ -91,6 +91,19 @@ sudo proxy --help                  # Справка
 ## English
 
 TG-Proxy installs and manages [Telegram Web Proxy](https://github.com/telegramdesktop/tproxy-server), MTProxy and Caddy on a Linux server. Its SSH-friendly terminal dashboard supports Russian and English.
+
+### Requirements and installation
+
+Use Ubuntu 22.04+ or Debian 12+ (`x86_64`), with `root` or `sudo`, a domain A record pointing at the server, and ports 80 and 443 available.
+
+```bash
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
+sudo proxy
+```
+
+The installer asks for a language, domain, certificate email and transport. The dashboard shows server metrics at the top, profiles on the left and actions on the right. The selected-key section starts open; other sections expand on demand. Press `F5` to refresh, `Q` to quit, or `Ctrl+P` to choose a theme. Clipboard support depends on your SSH terminal.
+
+The command examples above also apply in English. Set `PROXY_LANG=en` for non-interactive commands. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
 
 ![TG-Proxy dashboard in English](assets/panel-en.png)
 
@@ -124,19 +137,6 @@ These settings are under **Service and maintenance → Limits and routes**.
 - **Workers** is the number of MTProxy worker processes. More processes can help under heavy load, but consume CPU and RAM. For a 1-vCPU VPS, start with `1` and adjust after observing the load.
 - **Max Connections** is the connection limit passed to MTProxy for each worker. Increasing it does not make the proxy faster by itself; actual capacity depends on CPU, memory and network bandwidth. A starting value is `4096`.
 - **Static Routing** controls how static website paths are matched: `exact` uses exact matching, while `legacy` preserves compatibility with the older behavior. Use `exact` unless backward compatibility is needed.
-
-### Requirements and installation
-
-Use Ubuntu 22.04+ or Debian 12+ (`x86_64`), with `root` or `sudo`, a domain A record pointing at the server, and ports 80 and 443 available.
-
-```bash
-sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/IohnMorris/tproxy-server_CLI/main/install.sh)"
-sudo proxy
-```
-
-The installer asks for a language, domain, certificate email and transport. The dashboard shows server metrics at the top, profiles on the left and actions on the right. The selected-key section starts open; other sections expand on demand. Press `F5` to refresh, `Q` to quit, or `Ctrl+P` to choose a theme. Clipboard support depends on your SSH terminal.
-
-The command examples above also apply in English. Set `PROXY_LANG=en` for non-interactive commands. The placeholder page is `/srv/tproxy-site/index.html`; saving an edited page through the dashboard restarts the services. Rotating a secret or path invalidates the affected old links.
 
 ### Updates
 
