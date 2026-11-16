@@ -159,6 +159,7 @@ def collect_server_metrics(profiles):
         states.append(f'{label}: {status}')
 
     connections = []
+    per_profile = {p.get('name', ''): [None, None] for p in profiles}
     for profile in profiles:
         port = str(profile.get('backend', '')).rsplit(':', 1)[-1]
         if not port.isdigit():
@@ -168,7 +169,9 @@ def collect_server_metrics(profiles):
         if output is None:
             connections = None
             break
-        connections.append(len(output.splitlines()))
+        count = len(output.splitlines())
+        connections.append(count)
+        per_profile[profile.get('name', '')][0] = (count + 5) // 6
     if connections is None:
         online = '—'
     else:
@@ -186,20 +189,24 @@ def collect_server_metrics(profiles):
     if saved is not None and nft is not None:
         try:
             names = {p.get('name', '') for p in profiles}
-            traffic = sum(int(saved.get(name, {}).get(direction, 0)) for name in names for direction in ('rx', 'tx'))
+            totals = {name: sum(int(saved.get(name, {}).get(direction, 0)) for direction in ('rx', 'tx')) for name in names}
             for item in json.loads(nft).get('nftables', []):
                 rule = item.get('rule', {})
                 comment = rule.get('comment', '')
                 if (comment.startswith('rx_') or comment.startswith('tx_')) and comment[3:] in names:
-                    traffic += sum(int(expr['counter'].get('bytes', 0)) for expr in rule.get('expr', []) if 'counter' in expr)
+                    totals[comment[3:]] += sum(int(expr['counter'].get('bytes', 0)) for expr in rule.get('expr', []) if 'counter' in expr)
+            traffic = sum(totals.values())
+            for name, total in totals.items():
+                per_profile[name][1] = total
         except (ValueError, TypeError, AttributeError):
             traffic = None
     disk_label = tr('Диск', 'Disk')
     online_label = tr('Онлайн', 'Online')
     traffic_label = tr('Трафик всего', 'Total traffic')
-    return (f'CPU: {cpu} • RAM: {ram} • {disk_label}: {disk_text} • Load: {load}\n'
+    summary = (f'CPU: {cpu} • RAM: {ram} • {disk_label}: {disk_text} • Load: {load}\n'
             f'{online_label}: {online} • {traffic_label}: {format_size(traffic) if traffic is not None else "—"} • '
             + '  '.join(states))
+    return summary, per_profile
 
 
 def make_link(profile, config):
@@ -378,6 +385,7 @@ class TProxyDashboard(App):
     def __init__(self):
         super().__init__()
         self.profiles = []
+        self.profile_metrics = {}
         self.busy = False
         self.metrics_busy = False
 
@@ -436,7 +444,7 @@ class TProxyDashboard(App):
         self.update_title()
         self.dashboard_screen.set_class(self.size.width < 90, 'narrow')
         table = self.dashboard_screen.query_one('#users_table', DataTable)
-        table.add_columns('№', tr('Имя', 'Name'), tr('Транспорт', 'Transport'), 'Backend')
+        table.add_columns('№', tr('Имя', 'Name'), tr('Транспорт', 'Transport'), 'Backend', tr('Онлайн', 'Online'), tr('Трафик', 'Traffic'))
         table.cursor_type, table.zebra_stripes = 'row', True
         self.action_refresh_data()
         self.set_interval(10, self.action_refresh_data)
@@ -484,7 +492,8 @@ class TProxyDashboard(App):
             self.profiles = profiles
             table.clear()
             for index, profile in enumerate(profiles, 1):
-                table.add_row(str(index), str(profile.get('name', '')), str(profile.get('carrier_mode', 'https')), str(profile.get('backend', '')))
+                online, traffic = self.profile_metrics.get(profile.get('name', ''), (None, None))
+                table.add_row(str(index), str(profile.get('name', '')), str(profile.get('carrier_mode', 'https')), str(profile.get('backend', '')), f'~{online}' if online is not None else '—', format_size(traffic) if traffic is not None else '—')
             if profiles:
                 table.move_cursor(row=min(cursor, len(profiles) - 1))
             self.dashboard_screen.query_one('#status', Static).update(tr(f'Профилей: {len(profiles)} • F5 — обновить', f'Profiles: {len(profiles)} • F5 — refresh') + (tr(' • Выполняется операция...', ' • Operation in progress...') if self.busy else ''))
@@ -499,8 +508,14 @@ class TProxyDashboard(App):
     async def refresh_metrics(self, profiles):
         self.metrics_busy = True
         try:
-            metrics = await asyncio.to_thread(collect_server_metrics, profiles)
-            self.dashboard_screen.query_one('#server-metrics', Static).update(metrics)
+            summary, metrics = await asyncio.to_thread(collect_server_metrics, profiles)
+            self.dashboard_screen.query_one('#server-metrics', Static).update(summary)
+            self.profile_metrics = metrics
+            table = self.dashboard_screen.query_one('#users_table', DataTable)
+            for row, profile in enumerate(self.profiles):
+                online, traffic = metrics.get(profile.get('name', ''), (None, None))
+                table.update_cell_at((row, 4), f'~{online}' if online is not None else '—', update_width=True)
+                table.update_cell_at((row, 5), format_size(traffic) if traffic is not None else '—', update_width=True)
         except Exception:
             self.dashboard_screen.query_one('#server-metrics', Static).update(tr('Сведения о сервере недоступны', 'Server information unavailable'))
         finally:
